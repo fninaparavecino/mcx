@@ -30,10 +30,10 @@ int main (int argc, char *argv[]) {
      mcx_initcfg(&mcxconfig);
 
      // parse command line options to initialize the configurations
-     mcx_parsecmd(argc,argv,&mcxconfig);
+     mcx_parsecmd(argc, argv, &mcxconfig);
 
      // identify gpu number and set one gpu active
-     if(!(activedev=mcx_list_gpu(&mcxconfig,&gpuinfo))){
+     if(!(activedev = mcx_list_gpu(&mcxconfig, &gpuinfo))){
          mcx_error(-1,"No GPU device found\n",__FILE__,__LINE__);
      }
 

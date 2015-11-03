@@ -429,33 +429,33 @@ kernel void mcx_test_rng(float field[],uint n_seed[]){
    cfg->unitinmm (scattering/absorption coeff, T, speed etc)
 */
 kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_seed[],
-     float4 n_pos[],float4 n_dir[],float4 n_len[],float n_det[], uint detectedphoton[], 
+     float4 n_pos[],float4 n_dir[],float4 n_len[],float n_det[], uint detectedphoton[],
      float srcpattern[],float replayweight[],float photontof[],RandType *seeddata){
 
-     int idx= blockDim.x * blockIdx.x + threadIdx.x;
+     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-     MCXpos  p={0.f,0.f,0.f,0.f};//{x,y,z}: coordinates in grid unit, w:packet weight
-     MCXdir *v=(MCXdir*)(sharedmem+(threadIdx.x<<2));   //{x,y,z}: unitary direction vector in grid unit, nscat:total scat event
-     MCXtime f;   //pscat: remaining scattering probability,t: photon elapse time, 
-                  //tnext: next accumulation time, ndone: completed photons
-     float  energyloss=genergy[idx*3];
-     float  energyabsorbed=genergy[idx*3+1];
-     float  energylaunched=genergy[idx*3+2];
+     MCXpos  p = {0.f,0.f,0.f,0.f};							//{x,y,z}: coordinates in grid unit, w:packet weight
+     MCXdir *v = (MCXdir*)(sharedmem+(threadIdx.x<<2));   	//{x,y,z}: unitary direction vector in grid unit, nscat:total scat event
+     MCXtime f;   											//pscat: remaining scattering probability,t: photon elapse time,
+                  	  	  	  	  	  	  	  	  	  		//tnext: next accumulation time, ndone: completed photons
+     float  energyloss = genergy[idx*3];
+     float  energyabsorbed = genergy[idx*3+1];
+     float  energylaunched = genergy[idx*3+2];
 
-     uint idx1d, idx1dold;   //idx1dold is related to reflection
-     uint moves=0;
+     uint idx1d, idx1dold;   							//idx1dold is related to reflection
+     uint moves = 0;
 
 #ifdef TEST_RACING
-     int cc=0;
+     int cc = 0;
 #endif
      uchar  mediaid,mediaidold;
      float  n1;   //reflection var
      float3 htime;            //reflection var
 
      //for MT RNG, these will be zero-length arrays and be optimized out
-     RandType *t=(RandType*)sharedmem+(blockDim.x<<2)+threadIdx.x*(RAND_BUF_LEN*3);
-     RandType *tnew=t+RAND_BUF_LEN;
-     RandType *photonseed=tnew+RAND_BUF_LEN;
+     RandType *t = (RandType*)sharedmem+(blockDim.x<<2)+threadIdx.x*(RAND_BUF_LEN*3);
+     RandType *tnew = t + RAND_BUF_LEN;
+     RandType *photonseed = tnew + RAND_BUF_LEN;
      Medium prop;    //can become float2 if no reflection (mua/musp is in 1/grid unit)
 
      float len, slen;
@@ -783,41 +783,58 @@ int mcx_list_gpu(Config *cfg, GPUInfo **info){
            cfg->deviceid[activedev]=dev+1;
            activedev++;
         }
-        strncpy((*info)[dev].name,dp.name,MAX_SESSION_LENGTH);
-        (*info)[dev].id=dev+1;
-	(*info)[dev].devcount=deviceCount;
-	(*info)[dev].major=dp.major;
-	(*info)[dev].minor=dp.minor;
-	(*info)[dev].globalmem=dp.totalGlobalMem;
-	(*info)[dev].constmem=dp.totalConstMem;
-	(*info)[dev].sharedmem=dp.sharedMemPerBlock;
-	(*info)[dev].regcount=dp.regsPerBlock;
-	(*info)[dev].clock=dp.clockRate;
-	(*info)[dev].sm=dp.multiProcessorCount;
-	(*info)[dev].core=dp.multiProcessorCount*mcx_corecount(dp.major,dp.minor);
+        strncpy((*info)[dev].name, dp.name, MAX_SESSION_LENGTH);
+        (*info)[dev].id = dev+1;
+        (*info)[dev].devcount = deviceCount;
+        (*info)[dev].major = dp.major;
+        (*info)[dev].minor = dp.minor;
+        (*info)[dev].globalmem = dp.totalGlobalMem;
+        (*info)[dev].constmem = dp.totalConstMem;
+        (*info)[dev].sharedmem = dp.sharedMemPerBlock;
+        (*info)[dev].regcount = dp.regsPerBlock;
+        (*info)[dev].clock = dp.clockRate;
+        (*info)[dev].sm = dp.multiProcessorCount;
+        (*info)[dev].core = dp.multiProcessorCount * mcx_corecount(dp.major, dp.minor);
+        (*info)[dev].maxThreadsPerMultiProcessor = dp.maxThreadsPerMultiProcessor;
 #ifdef USE_MT_RAND
-        (*info)[dev].autoblock=1;
+        (*info)[dev].autoblock = 1;
 #else
-        (*info)[dev].autoblock=32;
+        (*info)[dev].autoblock = 64;
 #endif
-        (*info)[dev].autothread=(*info)[dev].core*32;
-        (*info)[dev].maxgate=cfg->maxgate;
+        MCX_FPRINTF( stdout, "\t %u SMX \n", (*info)[dev].sm);
+        if ((*info)[dev].major < 3) // compute capability < 3.0 supports 8 blocks per SMX
+        {
+        	(*info)[dev].autoblock = (*info)[dev].maxThreadsPerMultiProcessor /8;
+        	(*info)[dev].autothread = (*info)[dev].autoblock * 8 * (*info)[dev].sm;
+        }
+        else if ((*info)[dev].major < 5) // compute capability > 3.0 and < 5.0 supports 16 blocks per SMX
+        {
+        	(*info)[dev].autoblock = (*info)[dev].maxThreadsPerMultiProcessor / 16;
+        	(*info)[dev].autothread = (*info)[dev].autoblock * 16 * (*info)[dev].sm;
+        }
+        else // compute capability > 5.0 supports 32 blocks per SMX
+        {
+        	(*info)[dev].autoblock = (*info)[dev].maxThreadsPerMultiProcessor / 32;
+        	(*info)[dev].autothread = (*info)[dev].autoblock * 32 * (*info)[dev].sm;
+        }
+        (*info)[dev].maxgate = cfg->maxgate;
 
-        if (strncmp(dp.name, "Device Emulation", 16)) {
-	  if(cfg->isgpuinfo){
-	    MCX_FPRINTF(stdout,"=============================   GPU Infomation  ================================\n");
-	    MCX_FPRINTF(stdout,"Device %d of %d:\t\t%s\n",(*info)[dev].id,(*info)[dev].devcount,(*info)[dev].name);
-	    MCX_FPRINTF(stdout,"Compute Capability:\t%u.%u\n",(*info)[dev].major,(*info)[dev].minor);
-	    MCX_FPRINTF(stdout,"Global Memory:\t\t%u B\nConstant Memory:\t%u B\n\
+        if (strncmp(dp.name, "Device Emulation", 16))
+        {
+        	if(cfg->isgpuinfo)
+        	{
+        		MCX_FPRINTF(stdout,"=============================   GPU Infomation  ================================\n");
+        		MCX_FPRINTF(stdout,"Device %d of %d:\t\t%s\n",(*info)[dev].id,(*info)[dev].devcount,(*info)[dev].name);
+        		MCX_FPRINTF(stdout,"Compute Capability:\t%u.%u\n",(*info)[dev].major,(*info)[dev].minor);
+        		MCX_FPRINTF(stdout,"Global Memory:\t\t%u B\nConstant Memory:\t%u B\n\
 Shared Memory:\t\t%u B\nRegisters:\t\t%u\nClock Speed:\t\t%.2f GHz\n",
                (unsigned int)(*info)[dev].globalmem,(unsigned int)(*info)[dev].constmem,
                (unsigned int)(*info)[dev].sharedmem,(unsigned int)(*info)[dev].regcount,(*info)[dev].clock*1e-6f);
-	  #if CUDART_VERSION >= 2000
-	       MCX_FPRINTF(stdout,"Number of MPs:\t\t%u\nNumber of Cores:\t%u\n",
-	          (*info)[dev].sm,(*info)[dev].core);
-	  #endif
-	  }
-	}
+	  	  	  #if CUDART_VERSION >= 2000
+				MCX_FPRINTF(stdout,"Number of MPs:\t\t%u\nNumber of Cores:\t%u\n", (*info)[dev].sm,(*info)[dev].core);
+	  	  	  #endif
+        	}
+        }
     }
     if(cfg->isgpuinfo==2 && cfg->parentid==mpStandalone){ //list GPU info only
           exit(0);
@@ -864,27 +881,26 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
      uint   *Pseed;
      float  *Pdet;
      RandType *seeddata=NULL;
-     uint    detected=0,sharedbuf=0;
-
+     uint    detected = 0, sharedbuf = 0;
      uchar *gmedia;
-     float4 *gPpos,*gPdir,*gPlen;
-     uint   *gPseed,*gdetected;
-     float  *gPdet,*gsrcpattern,*gfield,*genergy,*greplayw,*greplaytof;
-     RandType *gseeddata=NULL;
-     MCXParam param={cfg->steps,minstep,0,0,cfg->tend,R_C0*cfg->unitinmm,
-                     cfg->issave2pt,cfg->isreflect,cfg->isrefint,cfg->issavedet,1.f/cfg->tstep,
-		     p0,c0,maxidx,uint3(0,0,0),cp0,cp1,uint2(0,0),cfg->minenergy,
-                     cfg->sradius*cfg->sradius,minstep*R_C0*cfg->unitinmm,cfg->srctype,
-		     cfg->srcparam1,cfg->srcparam2,cfg->voidtime,cfg->maxdetphoton,
-		     cfg->medianum-1,cfg->detnum,0,0,cfg->reseedlimit,ABS(cfg->sradius+2.f)<EPS /*isatomic*/,
-		     cfg->maxvoidstep,cfg->issaveseed>0,cfg->maxdetphoton*(cfg->medianum+1),cfg->seed,
-		     cfg->outputtype,0,0,cfg->faststep};
+     float4 *gPpos, *gPdir, *gPlen;
+     uint   *gPseed, *gdetected;
+     float  *gPdet, *gsrcpattern, *gfield, *genergy, *greplayw, *greplaytof;
+     RandType *gseeddata = NULL;
+     MCXParam param={cfg->steps, minstep, 0, 0, cfg->tend, R_C0 * cfg->unitinmm,
+                     cfg->issave2pt, cfg->isreflect, cfg->isrefint, cfg->issavedet, 1.f/cfg->tstep,
+		     p0, c0, maxidx, uint3(0,0,0), cp0, cp1, uint2(0,0), cfg->minenergy,
+                     cfg->sradius*cfg->sradius, minstep*R_C0*cfg->unitinmm, cfg->srctype,
+		     cfg->srcparam1, cfg->srcparam2, cfg->voidtime, cfg->maxdetphoton,
+		     cfg->medianum-1, cfg->detnum,0,0,cfg->reseedlimit,ABS(cfg->sradius+2.f)<EPS /*isatomic*/,
+		     cfg->maxvoidstep, cfg->issaveseed>0,cfg->maxdetphoton*(cfg->medianum+1),cfg->seed,
+		     cfg->outputtype, 0, 0, cfg->faststep};
      int detreclen=cfg->medianum+1;
      if(param.isatomic)
          param.skipradius2=0.f;
 
 #ifdef _OPENMP
-     threadid=omp_get_thread_num();
+     threadid = omp_get_thread_num();
 #endif
      if(threadid<MAX_DEVICE && cfg->deviceid[threadid]=='\0')
            return;
@@ -920,14 +936,18 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
 	gpu[gpuid].autoblock=cfg->nblocksize;
 	gpu[gpuid].maxgate=cfg->maxgate;
      }
-     if(gpu[gpuid].autothread%gpu[gpuid].autoblock)
-     	gpu[gpuid].autothread=(gpu[gpuid].autothread/gpu[gpuid].autoblock)*gpu[gpuid].autoblock;
+     if(gpu[gpuid].autothread % gpu[gpuid].autoblock)
+     {
+    	 gpu[gpuid].autothread = (gpu[gpuid].autothread/gpu[gpuid].autoblock)*gpu[gpuid].autoblock;
+     }
+     MCX_FPRINTF(cfg->flog,"autopilot mode: setting thread number to %d, block size to %d and time gates to %d\n", gpu[gpuid].autothread, gpu[gpuid].autoblock, gpu[gpuid].maxgate);
 
-     MCX_FPRINTF(cfg->flog,"autopilot mode: setting thread number to %d, block size to %d and time gates to %d\n",gpu[gpuid].autothread,gpu[gpuid].autoblock,gpu[gpuid].maxgate);
-
-     if(cfg->respin>1){
+     if(cfg->respin > 1)
+     {
          field=(float *)calloc(sizeof(float)*dimxyz,gpu[gpuid].maxgate*2);
-     }else{
+     }
+     else
+     {
          field=(float *)calloc(sizeof(float)*dimxyz,gpu[gpuid].maxgate); //the second half will be used to accumulate
      }
 
