@@ -241,11 +241,11 @@ __device__ inline void rotatevector(MCXdir *v, float stheta, float ctheta, float
       GPUDEBUG(("new dir: %10.5e %10.5e %10.5e\n",v->x,v->y,v->z));
 }
 
-__device__ inline int launchnewphoton(MCXpos *p,MCXdir *v,MCXtime *f,Medium *prop,uint *idx1d,
-           uchar *mediaid,float *w0,float *Lmove,uchar isdet, float ppath[],float energyloss[],float energylaunched[],float n_det[],uint *dpnum,
-	   RandType t[RAND_BUF_LEN],RandType tnew[RAND_BUF_LEN],RandType photonseed[RAND_BUF_LEN],
-	   uchar media[],float srcpattern[],int threadid,RandType rngseed[],RandType seeddata[]){
-      int launchattempt=1;
+__device__ inline int launchnewphoton(MCXpos *p, MCXdir *v, MCXtime *f, Medium *prop, uint *idx1d,
+           uchar *mediaid, float *w0, float *Lmove, uchar isdet, float ppath[], float energyloss[], float energylaunched[], float n_det[], uint *dpnum,
+	   RandType t[RAND_BUF_LEN], RandType tnew[RAND_BUF_LEN], RandType photonseed[RAND_BUF_LEN],
+	   uchar media[], float srcpattern[], int threadid, RandType rngseed[], RandType seeddata[]){
+      int launchattempt = 1;
       *energyloss+=p->w;  // sum all the remaining energy
 #ifdef SAVE_DETECTORS
       // let's handle detectors here
@@ -436,33 +436,34 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 
      MCXpos  p = {0.f, 0.f, 0.f, 0.f};							//{x,y,z}: coordinates in grid unit, w:packet weight
      MCXdir *v = (MCXdir*)(sharedmem + (threadIdx.x<<2));   				//{x,y,z}: unitary direction vector in grid unit, nscat:total scat event
-     MCXtime f;   											//pscat: remaining scattering probability,t: photon elapse time,
-                  	  	  	  	  	  	  	  	  	  		//tnext: next accumulation time, ndone: completed photons
+											//First four floating elements are associated to MCXdir (16B)
+     MCXtime f;   									//pscat: remaining scattering probability,t: photon elapse time,
+                  	  	  	  	  	  	  	  	  	//tnext: next accumulation time, ndone: completed photons
      float  energyloss = genergy[idx*3];
      float  energyabsorbed = genergy[idx*3+1];
      float  energylaunched = genergy[idx*3+2];
 
-     uint idx1d, idx1dold;   							//idx1dold is related to reflection
+     uint idx1d, idx1dold;   								//idx1dold is related to reflection
      uint moves = 0;
 
 #ifdef TEST_RACING
      int cc = 0;
 #endif
      uchar  mediaid,mediaidold;
-     float  n1;   //reflection var
-     float3 htime;            //reflection var
+     float  n1;   		//reflection var
+     float3 htime;            	//reflection var
 
      //for MT RNG, these will be zero-length arrays and be optimized out
-     RandType *t = (RandType*)(sharedmem+(blockDim.x<<2)+threadIdx.x*(RAND_BUF_LEN*3));
-     RandType *tnew = t + RAND_BUF_LEN;
-     RandType *photonseed = tnew + RAND_BUF_LEN;
+     RandType *t = (RandType*)(sharedmem + (blockDim.x<<2) + threadIdx.x * (RAND_BUF_LEN));
+     RandType tnew[RAND_BUF_LEN] = {0.f, 0.f, 0.f, 0.f, 0.f};
+     RandType photonseed[RAND_BUF_LEN] = {0.f, 0.f, 0.f, 0.f};
      Medium prop;    //can become float2 if no reflection (mua/musp is in 1/grid unit)
 
      float len, slen;
-     float w0,Lmove;
-     int   flipdir=-1;
+     float w0, Lmove;
+     int   flipdir = -1;
  
-     float *ppath=sharedmem+blockDim.x*(RAND_BUF_LEN*3+4);
+     float *ppath = sharedmem + blockDim.x*(RAND_BUF_LEN+4);
 #ifdef  USE_CACHEBOX
   #ifdef  SAVE_DETECTORS
      float *cachebox=ppath+(gcfg->savedet ? blockDim.x*gcfg->maxmedia: 0);
@@ -475,7 +476,7 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 #endif
 
 #ifdef  SAVE_DETECTORS
-     ppath+=threadIdx.x*gcfg->maxmedia;
+     ppath += threadIdx.x * gcfg->maxmedia;
      if(gcfg->savedet) clearpath(ppath,gcfg->maxmedia);
 #endif
 
@@ -1152,7 +1153,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
 
 	 The calculation of the energy conservation will only reflect the last simulation.
      */
-     sharedbuf=gpu[gpuid].autoblock*(sizeof(RandType)*RAND_SEED_LEN*3+sizeof(MCXdir));
+     sharedbuf=gpu[gpuid].autoblock*(sizeof(RandType)*RAND_SEED_LEN+sizeof(MCXdir));
 #ifdef  USE_CACHEBOX
      if(cfg->sradius>EPS || ABS(cfg->sradius+1.f)<EPS)
         sharedbuf+=sizeof(float)*((cp1.x-cp0.x+1)*(cp1.y-cp0.y+1)*(cp1.z-cp0.z+1));
