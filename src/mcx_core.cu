@@ -434,8 +434,8 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 
      int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-     MCXpos  p = {0.f,0.f,0.f,0.f};							//{x,y,z}: coordinates in grid unit, w:packet weight
-     MCXdir *v = (MCXdir*)(sharedmem+(threadIdx.x<<2));   	//{x,y,z}: unitary direction vector in grid unit, nscat:total scat event
+     MCXpos  p = {0.f, 0.f, 0.f, 0.f};							//{x,y,z}: coordinates in grid unit, w:packet weight
+     MCXdir *v = (MCXdir*)(sharedmem + (threadIdx.x<<2));   				//{x,y,z}: unitary direction vector in grid unit, nscat:total scat event
      MCXtime f;   											//pscat: remaining scattering probability,t: photon elapse time,
                   	  	  	  	  	  	  	  	  	  		//tnext: next accumulation time, ndone: completed photons
      float  energyloss = genergy[idx*3];
@@ -453,7 +453,7 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
      float3 htime;            //reflection var
 
      //for MT RNG, these will be zero-length arrays and be optimized out
-     RandType *t = (RandType*)sharedmem+(blockDim.x<<2)+threadIdx.x*(RAND_BUF_LEN*3);
+     RandType *t = (RandType*)(sharedmem+(blockDim.x<<2)+threadIdx.x*(RAND_BUF_LEN*3));
      RandType *tnew = t + RAND_BUF_LEN;
      RandType *photonseed = tnew + RAND_BUF_LEN;
      Medium prop;    //can become float2 if no reflection (mua/musp is in 1/grid unit)
