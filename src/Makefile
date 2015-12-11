@@ -144,7 +144,15 @@ sassi:
 	/usr/local/sassi7/bin/nvcc -I/usr/local/sassi7/include -g -O3  -c -o cjson/cJSON.o  cjson/cJSON.c
 	/usr/local/sassi7/bin/nvcc mcx_core.o mcx_core_dlink.o mcx_utils.o mcx_shapes.o tictoc.o mcextreme.o cjson/cJSON.o -o ../bin/mcx -gencode arch=compute_35,code=sm_35 -lm -lstdc++ -m64 -L/home/fanny/Desktop/SASSI/instlibs/lib -lopcode -L/usr/local/sassi7/extras/CUPTI/lib64 -lcupti -lcudadevrt
 
-
+sassi_none:
+	/usr/local/sassi7/bin/nvcc -c -gencode arch=compute_35,code=sm_35 -g -O3 -dc -o mcx_core.o  mcx_core.cu
+	/usr/local/sassi7/bin/nvcc -c -gencode arch=compute_35,code=sm_35 -Xptxas --sassi-inst-before="all" -Xptxas --sassi-before-args="reg-info" -g -O3 -dlink -o mcx_core_dlink.o  mcx_core.o
+	/usr/local/sassi7/bin/nvcc -I/usr/local/sassi7/include -g -O3  -c -o mcx_utils.o  mcx_utils.c
+	/usr/local/sassi7/bin/nvcc -I/usr/local/sassi7/include -g -O3  -c -o mcx_shapes.o  mcx_shapes.c
+	/usr/local/sassi7/bin/nvcc -I/usr/local/sassi7/include -g -O3  -c -o tictoc.o  tictoc.c
+	/usr/local/sassi7/bin/nvcc -I/usr/local/sassi7/include -g -O3  -c -o mcextreme.o  mcextreme.c
+	/usr/local/sassi7/bin/nvcc -I/usr/local/sassi7/include -g -O3  -c -o cjson/cJSON.o  cjson/cJSON.c
+	/usr/local/sassi7/bin/nvcc mcx_core.o mcx_core_dlink.o mcx_utils.o mcx_shapes.o tictoc.o mcextreme.o cjson/cJSON.o -o ../bin/mcx -gencode arch=compute_35,code=sm_35 -lm -lstdc++ -m64 -L/home/fanny/Desktop/SASSI/instlibs/lib -L/usr/local/sassi7/extras/CUPTI/lib64 -lcupti -lcudadevrt
 
 clean:
 
