@@ -590,7 +590,14 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 
           n1=prop.n;
 	  *((float4*)(&prop))=gproperty[mediaid & MED_MASK];
+	 // printf("\nDebugging process.... \n");
+	 // printf("gcfg->faststep: %d gcfg->minstep: %d", gcfg->faststep, gcfg->minstep);
 	  
+	 // printf("\n");
+	  int temp1 = 1;
+	  __powf(temp1, 2.0f);
+	  
+	  //len= gcfg->minstep; // propagate the photon to the first intersection to the grid
 	  len=(gcfg->faststep) ? gcfg->minstep : hitgrid((float3*)&p,(float3*)&v,&htime,&flipdir); // propagate the photon to the first intersection to the grid
 	  slen=len*prop.mus; //unitless (minstep=grid, mus=1/grid)
 
