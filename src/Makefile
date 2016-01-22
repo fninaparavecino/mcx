@@ -16,13 +16,13 @@ AR=$(CC)
 BINARY=mcx
 OUTPUT_DIR=../bin
 
-INCLUDEDIRS=-I/usr/local/cuda-7.5/include
+INCLUDEDIRS=-I/usr/local/cuda-7.0/include
 
 ifeq ($(BACKEND),ocelot)
   LINKOPT=-L/usr/local/lib `OcelotConfig -l`
   CUCCOPT=-g -arch=sm_35 #--maxrregcount 32
 else
-  LINKOPT=-L/usr/local/cuda-7.5/lib64 -lcudart -lm -lstdc++
+  LINKOPT=-L/usr/local/cuda-7.0/lib64 -lcudart -lm -lstdc++
   CUCCOPT=-lineinfo #-g #-arch compute_20 #--maxrregcount 32
 endif
 
@@ -51,7 +51,7 @@ else
      CUCCOPT +=-m64
      ifeq "$(wildcard /usr/local/cuda/lib64)" "/usr/local/cuda/lib64"
         ifeq ($(BACKEND),cuda)
-           LINKOPT=-L/usr/local/cuda-7.5/lib64 -lcudart -lm -lstdc++
+           LINKOPT=-L/usr/local/cuda-7.0/lib64 -lcudart -lm -lstdc++
         endif
      endif
   endif
