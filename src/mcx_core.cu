@@ -150,7 +150,7 @@ __device__ inline float hitgrid(float3 *p0, float *v, float *htime,int *id){
       //p0 is inside, p is outside, move to the 1st intersection pt, now in the air side, to be corrected in the else block
       htime[0]=p0->x+dist*v[0];
       htime[1]=p0->y+dist*v[1];
-      htime[3]=p0->z+dist*v[2];
+      htime[2]=p0->z+dist*v[2];
 
       // make sure photon crosses the boundary
       htime[*id] = nextafterf(__float2int_rn(htime[*id]), htime[*id]+(v[*id] > 0.f)-0.5f);
