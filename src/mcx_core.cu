@@ -153,8 +153,11 @@ __device__ inline float hitgrid(float3 *p0, float *v, float *htime,int *id){
       htime[2]=p0->z+dist*v[2];
 
       // make sure photon crosses the boundary
+      clock_t start, stop;
+      start = clock();
       htime[*id] = nextafterf(__float2int_rn(htime[*id]), htime[*id]+(v[*id] > 0.f)-0.5f);
-     
+      stop = clock();
+      printf("Clocks for hitgrid: %d\n", (int) (stop -start));
 /*     (*id==0) ?
           (htime[0]=nextafterf(__float2int_rn(htime[0]), htime[0]+(v[0] > 0.f)-0.5f)) :
 	  ((*id==1) ? 
@@ -542,6 +545,7 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 
      gpu_rng_init(t,tnew,n_seed,idx);
 
+     clock_t start_time = clock();
      if(launchnewphoton(&p,&v,&f,&prop,&idx1d,&mediaid,&w0,&Lmove,0,ppath,&energyloss,
        &energylaunched,n_det,detectedphoton,t,tnew,photonseed,media,srcpattern,
        idx,(RandType*)n_seed,seeddata)){
@@ -551,7 +555,9 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 	 n_len[idx]=*((float4*)(&f));
          return;
      }
-
+     clock_t stop_time = clock();
+     if (idx== 0) //just for the first thread
+          printf("Number of clocks: %d... \t", (int)(stop_time-start_time));
      /*
       using a while-loop to terminate a thread by np.will cause MT RNG to be 3.5x slower
       LL5 RNG will only be slightly slower than for-loop.with photon-move criterion
@@ -616,7 +622,11 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 	  //__powf(temp1, 2.0f);
 	  
 	  //len= gcfg->minstep; // propagate the photon to the first intersection to the grid
+          start_time = clock();
 	  len=(gcfg->faststep) ? gcfg->minstep : hitgrid((float3*)&p,(float *)&v, htime,&flipdir); // propagate the photon to the first intersection to the grid
+          stop_time = clock();
+          if (idx == 0)// just for the first thread
+              printf("Number of clocks for hitgrid: %d...\t", (int)(stop_time-start_time));
 	  slen=len*prop.mus; //unitless (minstep=grid, mus=1/grid)
 
          // GPUDEBUG(("p=[%f %f %f] -> <%f %f %f>*%f -> hit=[%f %f %f] flip=%d\n",p.x,p.y,p.z,v.x,v.y,v.z,len,htime.x,htime.y,htime.z,flipdir));
