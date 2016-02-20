@@ -485,7 +485,6 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
      int idx= blockDim.x * blockIdx.x + threadIdx.x;
 
      MCXpos  p={0.f,0.f,0.f,-1.f};//{x,y,z}: coordinates in grid unit, w:packet weight
-    // MCXdir *v=(MCXdir*)(sharedmem+(threadIdx.x<<2));   //{x,y,z}: unitary direction vector in grid unit, nscat:total scat event
      MCXdir v = {0.f, 0.f, 0.f, 0.f};
      MCXtime f;   //pscat: remaining scattering probability,t: photon elapse time, 
                   //tnext: next accumulation time, ndone: completed photons
@@ -507,7 +506,6 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
      float3 rv;
 
      //for MT RNG, these will be zero-length arrays and be optimized out
-//     RandType *t=(RandType*)(sharedmem+(blockDim.x<<2)+threadIdx.x*RAND_BUF_LEN);
      RandType *t=(RandType*)(sharedmem+threadIdx.x*RAND_BUF_LEN);
      RandType tnew[RAND_BUF_LEN]; // ok withou initialization, will be assigned before use
      RandType photonseed[RAND_BUF_LEN];
