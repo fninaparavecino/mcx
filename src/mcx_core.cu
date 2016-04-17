@@ -269,11 +269,11 @@ __device__ inline void rotatevector(MCXdir *v, float stheta, float ctheta, float
 
 // FNP: Device functions pointers for launchnewphoton
 
-__device__ int srcPencil(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uchar *mediaid, uchar media[])
+__device__ int srcPencil(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uint *mediaid, uchar media[])
 {
       return NULL;
 }
-__device__ int srcPlanarPatternFourier(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uchar *mediaid, uchar media[])
+__device__ int srcPlanarPatternFourier(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uint *mediaid, uchar media[])
 {
       float rx=rand_uniform01(t);
       float ry=rand_uniform01(t);
@@ -296,7 +296,7 @@ __device__ int srcPlanarPatternFourier(MCXpos *p, RandType t[RAND_BUF_LEN], floa
       return NULL;
 }
 
-__device__ int srcFourierxFourierx2d(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uchar *mediaid, uchar media[])
+__device__ int srcFourierxFourierx2d(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uint *mediaid, uchar media[])
 {
       float rx=rand_uniform01(t);
       float ry=rand_uniform01(t);
@@ -324,7 +324,7 @@ __device__ int srcFourierxFourierx2d(MCXpos *p, RandType t[RAND_BUF_LEN], float 
       return NULL;
 }
 
-__device__ int srcDiskGaussian(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uchar *mediaid, uchar media[])
+__device__ int srcDiskGaussian(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uint *mediaid, uchar media[])
 {
       // Uniform disk point picking
       // http://mathworld.wolfram.com/DiskPointPicking.html
@@ -360,7 +360,7 @@ __device__ int srcDiskGaussian(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpat
       return NULL;
 }
 
-__device__ int srcConeIsotropicArcsine(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uchar *mediaid, uchar media[])
+__device__ int srcConeIsotropicArcsine(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uint *mediaid, uchar media[])
 {
       // Uniform point picking on a sphere
       // http://mathworld.wolfram.com/SpherePointPicking.html
@@ -382,7 +382,7 @@ __device__ int srcConeIsotropicArcsine(MCXpos *p, RandType t[RAND_BUF_LEN], floa
       return NULL;
 }
 
-__device__ int srcZgaussian(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uchar *mediaid, uchar media[])
+__device__ int srcZgaussian(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uint *mediaid, uchar media[])
 {
       float ang,stheta,ctheta,sphi,cphi;
       ang=TWO_PI*rand_uniform01(t); //next arimuth angle
@@ -393,7 +393,7 @@ __device__ int srcZgaussian(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpatter
       return NULL;
 }
 
-__device__ int srcLineSlit(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uchar *mediaid, uchar media[])
+__device__ int srcLineSlit(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern[], MCXdir *v, uint *idx1d, uint *mediaid, uchar media[])
 {
       float r=rand_uniform01(t);
       *((float4*)p)=float4(p->x+r*gcfg->srcparam1.x,
@@ -409,7 +409,7 @@ __device__ int srcLineSlit(MCXpos *p, RandType t[RAND_BUF_LEN], float srcpattern
       }
       return NULL;
 }
-typedef int (*pfunc)(MCXpos*, RandType*, float*, MCXdir*, uint*, uchar*, uchar*);
+typedef int (*pfunc)(MCXpos*, RandType*, float*, MCXdir*, uint*, uint*, uchar*);
 
 __device__ pfunc func[14] = {srcPencil, srcPlanarPatternFourier, srcPlanarPatternFourier, srcPlanarPatternFourier, srcFourierxFourierx2d, srcFourierxFourierx2d, srcDiskGaussian, srcDiskGaussian, 
 srcConeIsotropicArcsine, srcConeIsotropicArcsine, srcConeIsotropicArcsine, srcZgaussian, srcLineSlit, srcLineSlit};
