@@ -940,9 +940,9 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
      if(param.isatomic)
          param.skipradius2=0.f;
 
-#ifdef _OPENMP
-     threadid=omp_get_thread_num();
-#endif
+//#ifdef _OPENMP
+//     threadid=omp_get_thread_num();
+//#endif
      if(threadid<MAX_DEVICE && cfg->deviceid[threadid]=='\0')
            return;
 
@@ -955,7 +955,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
          gpu[gpuid].maxgate=MIN(((cfg->tend-cfg->tstart)/cfg->tstep+0.5),gpu[gpuid].maxgate);     
      }
      /*only allow the master thread to modify cfg, others are read-only*/
-#pragma omp master
+//#pragma omp master
 {
      if(cfg->exportfield==NULL)
          cfg->exportfield=(float *)calloc(sizeof(float)*cfg->dim.x*cfg->dim.y*cfg->dim.z,gpu[gpuid].maxgate*2);
@@ -970,7 +970,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
      cfg->energyesc=0.f;
      cfg->runtime=0;
 }
-#pragma omp barrier
+//#pragma omp barrier
 
      if(!cfg->autopilot){
 	gpu[gpuid].autothread=cfg->nthread;
@@ -986,7 +986,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
          field=(float *)calloc(sizeof(float)*dimxyz,gpu[gpuid].maxgate); //the second half will be used to accumulate
      }
 
-#pragma omp master
+//#pragma omp master
 {
      fullload=0.f;
      for(i=0;cfg->deviceid[i];i++)
@@ -997,7 +997,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
             cfg->workload[i]=gpu[cfg->deviceid[i]-1].core;
      }
 }
-#pragma omp barrier
+//#pragma omp barrier
 
      fullload=0.f;
      for(i=0;cfg->deviceid[i];i++)
@@ -1014,12 +1014,12 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
      param.threadphoton=gpuphoton/gpu[gpuid].autothread/cfg->respin;
      param.oddphotons=gpuphoton/cfg->respin-param.threadphoton*gpu[gpuid].autothread;
      totalgates=(int)((cfg->tend-cfg->tstart)/cfg->tstep+0.5);
-#pragma omp master
+//#pragma omp master
      if(totalgates>gpu[gpuid].maxgate && cfg->isnormalized){
          MCX_FPRINTF(stderr,"WARNING: GPU memory can not hold all time gates, disabling normalization to allow multiple runs\n");
          cfg->isnormalized=0;
      }
-#pragma omp barrier
+//#pragma omp barrier
 
      fieldlen=dimxyz*gpu[gpuid].maxgate;
 
@@ -1031,7 +1031,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
      clblock.x=cfg->dim.z;
 
      if(cfg->debuglevel & MCX_DEBUG_RNG){
-#pragma omp master
+//#pragma omp master
 {
            param.twin0=cfg->tstart;
            param.twin1=cfg->tend;
@@ -1068,7 +1068,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
 
            CUDA_ASSERT(cudaDeviceReset());
 }
-#pragma omp barrier
+//#pragma omp barrier
 
 	   return;
      }
@@ -1112,12 +1112,12 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
          CUDA_ASSERT(cudaMalloc((void **) &gsrcpattern, sizeof(float)*(int)(cfg->srcparam1.w*cfg->srcparam2.w)));
 
 #ifndef SAVE_DETECTORS
-#pragma omp master
+//#pragma omp master
      if(cfg->issavedet){
            MCX_FPRINTF(stderr,"WARNING: this MCX binary can not save partial path, please use mcx_det or mcx_det_cached\n");
            cfg->issavedet=0;
      }
-#pragma omp barrier
+//#pragma omp barrier
 #endif
 
      /*volume is assumbed to be col-major*/
@@ -1151,7 +1151,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
            Plen[i]=float4(0.f,0.f,param.minaccumtime,0.f);
      }
      tic=StartTimer();
-#pragma omp master
+//#pragma omp master
 {
      mcx_printheader(cfg);
 
@@ -1170,7 +1170,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
 #endif
      fflush(cfg->flog);
 }
-#pragma omp barrier
+//#pragma omp barrier
 
      MCX_FPRINTF(cfg->flog,"\nGPU=%d (%s) threadph=%d extra=%d np=%d nthread=%d maxgate=%d repetition=%d\n",gpuid+1,gpu[gpuid].name,param.threadphoton,param.oddphotons,
            gpuphoton,gpu[gpuid].autothread,gpu[gpuid].maxgate,cfg->respin);
@@ -1266,11 +1266,11 @@ is more than what your have specified (%d), please use the -H option to specify 
 		}else{
 			MCX_FPRINTF(cfg->flog,"detected %d photons, total: %d\t",detected,cfg->detectedcount+detected);
 		}
-#pragma omp atomic
+//#pragma omp atomic
                 cfg->his.detected+=detected;
                 detected=MIN(detected,cfg->maxdetphoton);
 		if(cfg->exportdetected){
-#pragma omp critical
+//#pragma omp critical
 {
                         cfg->exportdetected=(float*)realloc(cfg->exportdetected,(cfg->detectedcount+detected)*detreclen*sizeof(float));
 			if(cfg->issaveseed && cfg->seeddata)
@@ -1296,7 +1296,7 @@ is more than what your have specified (%d), please use the -H option to specify 
            }
        } /*end of respin loop*/
 
-#pragma omp critical
+//#pragma omp critical
        if(cfg->runtime<toc)
            cfg->runtime=toc;
 
@@ -1305,7 +1305,7 @@ is more than what your have specified (%d), please use the -H option to specify 
 
        if(cfg->isnormalized){
            CUDA_ASSERT(cudaMemcpy(energy,genergy,sizeof(float)*(gpu[gpuid].autothread<<1),cudaMemcpyDeviceToHost));
-#pragma omp critical
+//#pragma omp critical
 {
            for(i=0;i<gpu[gpuid].autothread;i++){
                cfg->energyesc+=energy[i<<1];
@@ -1319,7 +1319,7 @@ is more than what your have specified (%d), please use the -H option to specify 
 
        if(cfg->exportfield){
 	       for(i=0;i<(int)fieldlen;i++)
-#pragma omp atomic
+//#pragma omp atomic
                   cfg->exportfield[i]+=field[i];
        }
 
@@ -1327,10 +1327,10 @@ is more than what your have specified (%d), please use the -H option to specify 
             CUDA_ASSERT(cudaMemset(genergy,0,sizeof(float)*(gpu[gpuid].autothread<<1)));
        }
      } /*end of time-gate group loop*/
-#pragma omp barrier
+//#pragma omp barrier
 
      /*let the master thread to deal with the normalization and file IO*/
-#pragma omp master
+//#pragma omp master
 {
      if(cfg->isnormalized){
 	   float scale=1.f;
@@ -1366,7 +1366,7 @@ is more than what your have specified (%d), please use the -H option to specify 
          mcx_savedetphoton(cfg->exportdetected,cfg->seeddata,cfg->detectedcount,0,cfg);
      }
 }
-#pragma omp barrier
+//#pragma omp barrier
 
      CUDA_ASSERT(cudaMemcpy(Ppos,  gPpos, sizeof(float4)*gpu[gpuid].autothread, cudaMemcpyDeviceToHost));
      CUDA_ASSERT(cudaMemcpy(Pdir,  gPdir, sizeof(float4)*gpu[gpuid].autothread, cudaMemcpyDeviceToHost));
@@ -1387,7 +1387,7 @@ is more than what your have specified (%d), please use the -H option to specify 
      }
 #endif
 
-#pragma omp master
+//#pragma omp master
 {
      printnum=(gpu[gpuid].autothread<(int)cfg->printnum) ? gpu[gpuid].autothread : cfg->printnum;
      for (i=0; i<(int)printnum; i++) {
@@ -1404,7 +1404,7 @@ is more than what your have specified (%d), please use the -H option to specify 
      
      cfg->energyabs=cfg->energytot-cfg->energyesc;
 }
-#pragma omp barrier
+//#pragma omp barrier
 
      CUDA_ASSERT(cudaFree(gmedia));
      CUDA_ASSERT(cudaFree(gfield));

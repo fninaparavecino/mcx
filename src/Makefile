@@ -146,6 +146,15 @@ $(OUTPUT_DIR)/$(BINARY): $(OBJS)
 %$(OBJSUFFIX): %.cu
 	$(CUDACC) -c $(CUCCOPT) -o $@  $<
 
+sassi_cfg:
+	/usr/local/sassi7/bin/nvcc -c -lineinfo -Xcompiler -fopenmp -m64 -DUSE_XORSHIFT128P_RAND -DUSE_ATOMIC -use_fast_math -DSAVE_DETECTORS -DUSE_CACHEBOX -use_fast_math -arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code=sm_50 -code=sm_52 -Xptxas --sassi-function-entry -Xptxas --sassi-bb-entry -g -O3 -dc -DMCX_TARGET_NAME='"Fermi MCX"' -o mcx_core.o  mcx_core.cu
+	/usr/local/sassi7/bin/nvcc -I/usr/local/cuda/include -g -O3 -m64 -c -o mcx_utils.o  mcx_utils.c
+	/usr/local/sassi7/bin/nvcc -I/usr/local/cuda/include -g -O3 -m64 -c -o mcx_shapes.o  mcx_shapes.c
+	/usr/local/sassi7/bin/nvcc -I/usr/local/cuda/include -g -O3 -m64 -c -o tictoc.o  tictoc.c
+	/usr/local/sassi7/bin/nvcc -I/usr/local/cuda/include -g -O3 -m64 -c -o mcextreme.o  mcextreme.c
+	/usr/local/sassi7/bin/nvcc -I/usr/local/cuda/include -g -O3 -m64 -c -o cjson/cJSON.o  cjson/cJSON.c
+	/usr/local/sassi7/bin/nvcc mcx_core.o mcx_utils.o mcx_shapes.o tictoc.o mcextreme.o cjson/cJSON.o -o ../bin/mcx -L/usr/local/cuda-7.0/lib64 -lcudart -lm -lstdc++ -gencode arch=compute_35,code=sm_35 -lcudadevrt -Xlinker -rpath,/usr/local/sassi7/extras/CUPTI/lib64 -L/home/fanny/Desktop/SASSI/instlibs/lib -lcfg -L/usr/local/sassi7/extras/CUPTI/lib64 -lcupti
+
 clean:
 	-rm -f $(OBJS) $(OUTPUT_DIR)/$(BINARY)$(EXESUFFIX) $(OUTPUT_DIR)/$(BINARY)_atomic$(EXESUFFIX) $(OUTPUT_DIR)/$(BINARY)_det$(EXESUFFIX)
 cudasdk:
