@@ -30,7 +30,28 @@ void matrixMultiplication(float *a, float *b, float *c, int row, int col, int k,
         float *devA, *devB, *devC;
 
 	//set cudaDevice
-	cudaSetDevice(3);
+	int num_devices, device;
+	cudaGetDeviceCount(&num_devices);
+	printf("Print number of devices: %d\n", num_devices);
+	if (num_devices > 1) {
+	      int max_multiprocessors = 0, max_device = 0;
+	      for (device = 0; device < num_devices; device++) {
+	              cudaDeviceProp properties;
+		      cudaGetDeviceProperties(&properties, device);
+			printf("Device id %d, %s : %d.%d\n", device, properties.name, properties.major, properties.minor);
+	              if (max_multiprocessors < properties.multiProcessorCount) {
+	                      max_multiprocessors = properties.multiProcessorCount;
+	                      max_device = device;
+	              }
+	      }
+		int chosenDevice = max_device;
+		printf("Max Device: %d\n", max_device);
+		chosenDevice = 0;
+		printf("Chosen device: %d\n", chosenDevice);
+//	      cudaSetDevice(max_device);
+	      cudaSetDevice(chosenDevice);
+	}
+//	cudaSetDevice(2);
         
 	//Time variables
 	cudaEvent_t start, stop;
