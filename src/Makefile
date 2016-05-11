@@ -153,7 +153,7 @@ sassi_cfg:
 	/usr/local/sassi7/bin/nvcc -I/usr/local/cuda/include -g -O3 -m64 -c -o tictoc.o  tictoc.c
 	/usr/local/sassi7/bin/nvcc -I/usr/local/cuda/include -g -O3 -m64 -c -o mcextreme.o  mcextreme.c
 	/usr/local/sassi7/bin/nvcc -I/usr/local/cuda/include -g -O3 -m64 -c -o cjson/cJSON.o  cjson/cJSON.c
-	/usr/local/sassi7/bin/nvcc mcx_core.o mcx_utils.o mcx_shapes.o tictoc.o mcextreme.o cjson/cJSON.o -o ../bin/mcx -L/usr/local/cuda-7.0/lib64 -lcudart -lm -lstdc++ -gencode arch=compute_35,code=sm_35 -lcudadevrt -Xlinker -rpath,/usr/local/sassi7/extras/CUPTI/lib64 -L/home/fanny/Desktop/SASSI/instlibs/lib -lcfg -L/usr/local/sassi7/extras/CUPTI/lib64 -lcupti
+	/usr/local/sassi7/bin/nvcc mcx_core.o mcx_utils.o mcx_shapes.o tictoc.o mcextreme.o cjson/cJSON.o -o ../bin/mcx -L/usr/local/cuda-7.0/lib64 -lcudart -lm -lstdc++ -gencode arch=compute_35,code=sm_35 -lcudadevrt -Xlinker -rpath,/usr/local/sassi7/extras/CUPTI/lib64 -L../SASSI/instlibs/lib -lcfg -L/usr/local/sassi7/extras/CUPTI/lib64 -lcupti
 
 clean:
 	-rm -f $(OBJS) $(OUTPUT_DIR)/$(BINARY)$(EXESUFFIX) $(OUTPUT_DIR)/$(BINARY)_atomic$(EXESUFFIX) $(OUTPUT_DIR)/$(BINARY)_det$(EXESUFFIX)
