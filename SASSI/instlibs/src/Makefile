@@ -8,7 +8,7 @@
 include ../env.mk
 
 # These libraries work with Fermi, the others do not.
-export FERMI_LIBS := libophist_fermi.a libstubs.a
+#export FERMI_LIBS := libophist_fermi.a libstubs.a
 
 export PATH := $(CCBIN):$(PATH)
 
