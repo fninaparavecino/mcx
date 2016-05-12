@@ -46,7 +46,7 @@ void matrixMultiplication(float *a, float *b, float *c, int row, int col, int k,
 	      }
 		int chosenDevice = max_device;
 		printf("Max Device: %d\n", max_device);
-		chosenDevice = 0;
+		chosenDevice = 1;
 		printf("Chosen device: %d\n", chosenDevice);
 //	      cudaSetDevice(max_device);
 	      cudaSetDevice(chosenDevice);
