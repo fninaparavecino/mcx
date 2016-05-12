@@ -17,7 +17,7 @@
 // Create a memory pool that we can populate on the device and read on the host.
 static __managed__ uint8_t sassi_mempool[POOLSIZE];
 static __managed__ int     sassi_mempool_cur;
-
+static __managed__ int sassi_total_instrs;
 // A structure to record a basic block.  We will perform a deep copy
 // of SASSI's SASSIBasicBlockParams for each basic block.
 struct BLOCK {
@@ -105,6 +105,7 @@ __device__ void sassi_function_entry(SASSIFunctionParams* fp)
 	blockPtr->isEntry = blockParam->IsEntryBlock();
 	blockPtr->isExit = blockParam->IsExitBlock();
 	blockPtr->numInstrs = blockParam->GetNumInstrs();
+	sassi_total_instrs += blockParam->GetNumInstrs();
 	blockPtr->numSuccs = blockParam->GetNumSuccs();
 	assert(blockParam->GetNumSuccs() <= 2);
 	const SASSIBasicBlockParams * const * succs = blockParam->GetSuccs();
@@ -140,6 +141,7 @@ __device__ void sassi_basic_block_entry(SASSIBasicBlockParams *bb)
 static void sassi_finalize(sassi::lazy_allocator::device_reset_reason unused)
 {
   cudaDeviceSynchronize();
+  printf("Total instructions: %d\n", sassi_total_instrs);
   FILE *cfgFile = fopen("sassi-cfg.dot", "w");
   sassi_cfg->map([cfgFile](int64_t k, CFG* &cfg) {
       fprintf(cfgFile, "digraph %s {\n", cfg->fnName);
@@ -176,6 +178,7 @@ static void sassi_finalize(sassi::lazy_allocator::device_reset_reason unused)
 static void sassi_init()
 {
   sassi_mempool_cur = 0;
+  sassi_total_instrs = 0;
   bzero(sassi_mempool, sizeof(sassi_mempool));
   sassi_cfg = new sassi::dictionary<int64_t, CFG*>(601);
   sassi_cfg_blocks = new sassi::dictionary<int64_t, BLOCK*>(7919);
