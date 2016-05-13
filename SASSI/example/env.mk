@@ -1,5 +1,5 @@
 # Point this toward your CUDA 7 compiler.
-export CUDA_HOME ?= /usr/local/cuda-7.0/
+export CUDA_HOME ?= /usr/local/cuda-7.5/
 export SASSI_HOME ?= /usr/local/sassi7/
 
 # Point this toward a C++-11 capable compiler (not the compiler
