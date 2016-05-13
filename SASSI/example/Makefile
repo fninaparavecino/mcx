@@ -87,6 +87,10 @@ $(TARGET): $(OBJECTS)
 run: $(TARGET)
 	./$(TARGET)
 
+mm:
+	nvcc -I./inc  -c -gencode arch=compute_20,code=sm_20 -gencode arch=compute_35,code=sm_35 -gencode arch=compute_52,code=sm_52 -g -O3 -dc -o kernelMatrixMul.o kernelMatrixMul.cu 
+	nvcc -o kernelMatrixMul kernelMatrixMul.o -gencode arch=compute_20,code=sm_20 -gencode arch=compute_35,code=sm_35 -gencode arch=compute_52,code=sm_52 -lcudadevrt
+
 clean: 
 	$(RM) -f $(TARGET) *.o
 
