@@ -2,7 +2,7 @@ TARGET := kernelMatrixMul
 OBJECTS := kernelMatrixMul.o
 
 # Copy the environment from env.mk
-include ../instlibs/env.mk
+include env.mk
 
 # Make sure NVCC uses the C++ compiler we want it to.
 export PATH := $(CCBIN):$(PATH)

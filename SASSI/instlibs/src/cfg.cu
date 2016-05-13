@@ -107,7 +107,7 @@ __device__ void sassi_function_entry(SASSIFunctionParams* fp)
 	blockPtr->numInstrs = blockParam->GetNumInstrs(); 
 	sassi_total_instrs += blockParam->GetNumInstrs();
 	blockPtr->numSuccs = blockParam->GetNumSuccs();
- 	printf("NumSuccs ; %d\n", blockParam->GetNumSuccs());
+ 	printf("NumSuccs: %d\n", blockParam->GetNumSuccs());
 	blockParam->GetNumSuccs() == 1 ? sassi_convergence++: (blockParam->GetNumSuccs() >=2 ? sassi_divergence++: sassi_divergence += 0);
 	assert(blockParam->GetNumSuccs() <= 2);
 	const SASSIBasicBlockParams * const * succs = blockParam->GetSuccs();
