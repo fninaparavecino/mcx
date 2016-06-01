@@ -18,6 +18,8 @@
 static __managed__ uint8_t sassi_mempool[POOLSIZE];
 static __managed__ int     sassi_mempool_cur;
 static __managed__ int sassi_total_instrs, sassi_divergence, sassi_convergence;
+static __managed__ int sassi_diverArray[15];
+//static __managed__ int sassi_convArray[15];
 // A structure to record a basic block.  We will perform a deep copy
 // of SASSI's SASSIBasicBlockParams for each basic block.
 struct BLOCK {
@@ -107,8 +109,21 @@ __device__ void sassi_function_entry(SASSIFunctionParams* fp)
 	blockPtr->numInstrs = blockParam->GetNumInstrs(); 
 	sassi_total_instrs += blockParam->GetNumInstrs();
 	blockPtr->numSuccs = blockParam->GetNumSuccs();
- 	printf("NumSuccs: %d\n", blockParam->GetNumSuccs());
-	blockParam->GetNumSuccs() == 1 ? sassi_convergence++: (blockParam->GetNumSuccs() >=2 ? sassi_divergence++: sassi_divergence += 0);
+ 	//printf("NumSuccs: %d\n", blockParam->GetNumSuccs());
+ 	if(blockParam->GetNumSuccs() == 1)
+		sassi_convergence++;
+	else
+	{
+		sassi_diverArray[blockParam->GetNumSuccs()]++;
+/*		switch(blockParamSuccs()){
+			case 3:
+				sassi_diverArray[3]++;
+			case 4:
+				
+		}*/
+		
+	}
+	blockParam->GetNumSuccs() == 1 ? sassi_convergence++: (blockParam->GetNumSuccs() >=2 ? sassi_divergence++ : sassi_divergence += 0);
 	assert(blockParam->GetNumSuccs() <= 2);
 	const SASSIBasicBlockParams * const * succs = blockParam->GetSuccs();
 	for (int s = 0; s < blockParam->GetNumSuccs(); s++) {
@@ -146,6 +161,11 @@ static void sassi_finalize(sassi::lazy_allocator::device_reset_reason unused)
   printf("Total instructions: %d\n", sassi_total_instrs);
   //printf("numBlocks: %d\n", numBlocks);
   printf("Total number of divergence: %d, and convergences: %d\n ", sassi_divergence, sassi_convergence);
+  // Print results of divergence
+  for(int i=0; i< 15; i++)
+  {
+	printf("%d : %d divergences\n", i, sassi_diverArray[i]);
+  }
   FILE *cfgFile = fopen("sassi-cfg.dot", "w");
   sassi_cfg->map([cfgFile](int64_t k, CFG* &cfg) {
       fprintf(cfgFile, "digraph %s {\n", cfg->fnName);
@@ -185,6 +205,11 @@ static void sassi_init()
   sassi_total_instrs = 0;
   sassi_divergence = 0;
   sassi_convergence = 0;
+  for(int i=0; i<15; i++)
+  {
+	sassi_diverArray[i]=0;
+//	sassi_convArray[i]=0;
+  }
   bzero(sassi_mempool, sizeof(sassi_mempool));
   sassi_cfg = new sassi::dictionary<int64_t, CFG*>(601);
   sassi_cfg_blocks = new sassi::dictionary<int64_t, BLOCK*>(7919);

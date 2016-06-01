@@ -1,0 +1,26 @@
+digraph _Z15matrixMulKernelPfS_S_iii {
+	BB0 [style=filled,fontcolor=gray0,shape=box,peripheries=1,color=gray94,label="BB0 : 1 ins"];
+	BB1 [style=filled,fontcolor=gray0,shape=box,peripheries=3,color=gray94,label="BB1 : 15 ins"];
+	BB2 [style=filled,fontcolor=gray0,shape=box,peripheries=1,color=gray94,label="BB2 : 9 ins"];
+	BB3 [style=filled,fontcolor=gray0,shape=box,peripheries=1,color=gray94,label="BB3 : 3 ins"];
+	BB4 [style=filled,fontcolor=gray0,shape=box,peripheries=1,color=gray94,label="BB4 : 2 ins"];
+	BB5 [style=filled,fontcolor=gray100,shape=box,peripheries=1,color=gray0,label="BB5 : 36 ins"];
+	BB6 [style=filled,fontcolor=gray0,shape=box,peripheries=1,color=gray94,label="BB6 : 2 ins"];
+	BB7 [style=filled,fontcolor=gray0,shape=box,peripheries=1,color=gray100,label="BB7 : 20 ins"];
+	BB8 [style=filled,fontcolor=gray0,shape=box,peripheries=1,color=gray94,label="BB8 : 6 ins"];
+	BB9 [style=filled,fontcolor=gray0,shape=box,peripheries=3,color=gray94,label="BB9 : 1 ins"];
+	BB0 -> BB1;
+	BB1 -> BB2;
+	BB2 -> BB8;
+	BB2 -> BB3;
+	BB3 -> BB6;
+	BB3 -> BB4;
+	BB4 -> BB5;
+	BB5 -> BB5;
+	BB5 -> BB6;
+	BB6 -> BB8;
+	BB6 -> BB7;
+	BB7 -> BB7;
+	BB7 -> BB8;
+	BB8 -> BB9;
+}
