@@ -42,7 +42,7 @@
 
 const char shortopt[]={'h','i','f','n','t','T','s','a','g','b','B','z','u','H','P','N',
                  'd','r','S','p','e','U','R','l','L','I','o','G','M','A','E','v','D',
-		 'k','q','Y','O','F','\0'};
+		 'k','q','Y','O','F','-','-','\0'};
 const char *fullopt[]={"--help","--interactive","--input","--photon",
                  "--thread","--blocksize","--session","--array",
                  "--gategroup","--reflect","--reflectin","--srcfrom0",
@@ -51,10 +51,11 @@ const char *fullopt[]={"--help","--interactive","--input","--photon",
                  "--normalize","--skipradius","--log","--listgpu",
                  "--printgpu","--root","--gpu","--dumpmask","--autopilot",
 		 "--seed","--version","--debug","--voidtime","--saveseed",
-		 "--replaydet","--outputtype","--faststep",""};
+		 "--replaydet","--outputtype","--faststep","--maxjumpdebug",
+                 "--maxvoidstep",""};
 
 const char outputtype[]={'x','f','e','j','t','\0'};
-const char debugflag[]={'R','\0'};
+const char debugflag[]={'R','M','\0'};
 const char *srctypeid[]={"pencil","isotropic","cone","gaussian","planar",
     "pattern","fourier","arcsine","disk","fourierx","fourierx2d","zgaussian","line","slit",""};
 
@@ -95,6 +96,9 @@ void mcx_initcfg(Config *cfg){
      cfg->isdumpmask=0;
      cfg->srctype=0;
      cfg->maxdetphoton=1000000;
+     cfg->maxjumpdebug=1000000;
+     cfg->exportdebugdata=NULL;
+     cfg->debugdatalen=0;
      cfg->autopilot=0;
      cfg->seed=0x623F9A9E;
      cfg->exportfield=NULL;
@@ -301,7 +305,6 @@ void mcx_writeconfig(char *fname, Config *cfg){
 }
 
 void mcx_prepdomain(char *filename, Config *cfg){
-     //int idx1d;
      if(filename[0] || cfg->vol){
         if(cfg->vol==NULL){
 	     mcx_loadvolume(filename,cfg);
@@ -322,28 +325,6 @@ void mcx_prepdomain(char *filename, Config *cfg){
 	}
 	if(cfg->issavedet)
 		mcx_maskdet(cfg);
-/*	if(cfg->srcpos.x<0.f || cfg->srcpos.y<0.f || cfg->srcpos.z<0.f || 
-	   cfg->srcpos.x>=cfg->dim.x || cfg->srcpos.y>=cfg->dim.y || cfg->srcpos.z>=cfg->dim.z)
-		mcx_error(-4,"source position is outside of the volume",__FILE__,__LINE__);
-	idx1d=(int)(floor(cfg->srcpos.z)*cfg->dim.y*cfg->dim.x+floor(cfg->srcpos.y)*cfg->dim.x+floor(cfg->srcpos.x));
-*/
-
-        /* if the specified source position is outside the domain, move the source
-	   along the initial vector until it hit the domain */
-	/*if(cfg->vol && cfg->vol[idx1d]==0){
-                printf("source (%f %f %f) is located outside the domain, vol[%d]=%d\n",
-		      cfg->srcpos.x,cfg->srcpos.y,cfg->srcpos.z,idx1d,cfg->vol[idx1d]);
-		while(cfg->vol[idx1d]==0){
-			cfg->srcpos.x+=cfg->srcdir.x;
-			cfg->srcpos.y+=cfg->srcdir.y;
-			cfg->srcpos.z+=cfg->srcdir.z;
-                        if(cfg->srcpos.x<0.f || cfg->srcpos.y<0.f || cfg->srcpos.z<0.f ||
-                               cfg->srcpos.x>=cfg->dim.x || cfg->srcpos.y>=cfg->dim.y || cfg->srcpos.z>=cfg->dim.z)
-                               mcx_error(-4,"searching non-zero voxel failed along the incident vector",__FILE__,__LINE__);
-			idx1d=(int)(floor(cfg->srcpos.z)*cfg->dim.y*cfg->dim.x+floor(cfg->srcpos.y)*cfg->dim.x+floor(cfg->srcpos.x));
-		}
-		printf("fixing source position to (%f %f %f)\n",cfg->srcpos.x,cfg->srcpos.y,cfg->srcpos.z);
-	}*/
      }else{
      	mcx_error(-4,"one must specify a binary volume file in order to run the simulation",__FILE__,__LINE__);
      }
@@ -354,6 +335,9 @@ void mcx_prepdomain(char *filename, Config *cfg){
 	}
         mcx_loadseedfile(cfg);
      }
+     for(int i=0;i<MAX_DEVICE;i++)
+        if(cfg->deviceid[i]=='0')
+           cfg->deviceid[i]='\0';
 }
 
 
@@ -1215,7 +1199,7 @@ void mcx_parsecmd(int argc, char* argv[], Config *cfg){
                                     break;
                                 }else{
                                     i=mcx_readarg(argc,argv,i,&(cfg->gpuid),"int");
-                                    memset(cfg->deviceid,0,MAX_DEVICE);
+                                    memset(cfg->deviceid,'0',MAX_DEVICE);
                                     if(cfg->gpuid<MAX_DEVICE)
                                          cfg->deviceid[cfg->gpuid-1]='1';
                                     else
@@ -1278,11 +1262,19 @@ void mcx_parsecmd(int argc, char* argv[], Config *cfg){
 		     case 'F':
 		     	        i=mcx_readarg(argc,argv,i,&(cfg->faststep),"char");
 		     	        break;
+		     case '-':  /*additional verbose parameters*/
+                                if(strcmp(argv[i]+2,"maxvoidstep"))
+                                     i=mcx_readarg(argc,argv,i,&(cfg->maxvoidstep),"int");
+                                else if(strcmp(argv[i]+2,"maxjumpdebug"))
+                                     i=mcx_readarg(argc,argv,i,&(cfg->maxjumpdebug),"int");
+                                else
+                                     MCX_FPRINTF(cfg->flog,"unknown verbose option: --%s\n",argv[i]+2);
+		     	        break;
 		}
 	    }
 	    i++;
      }
-     if(issavelog && cfg->session){
+     if(issavelog && cfg->session[0]){
           sprintf(logfile,"%s.log",cfg->session);
           cfg->flog=fopen(logfile,"wt");
           if(cfg->flog==NULL){

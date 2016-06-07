@@ -14,6 +14,9 @@ cfg.gpuid=1;  % gpuid can be an integer 1-N to specify the n-th GPU
               % or it can be a string containing only '0's and '1's. 
 	      % exp: if gpuid='1010', it means the 1st and 3rd GPU are both used.
 
+%cfg.gpuid='111';          % on wazu, GPU#1,2,3 are 980Ti, 590 Core1 and Core 2
+%cfg.workload=[90,10,10];  % workload distribution between the 3 GPUs
+
 gpuid=cfg.gpuid;
 
 if(ischar(gpuid) && regexp(gpuid,'^[01]+$'))
@@ -31,6 +34,13 @@ end
 
 dates=datestr(now,'yyyy-mm-dd HH:MM:SS');
 mcxbenchmark=struct('date',dates,'gpu',gpuinfo(gpuid==1));
+
+try
+    hbar=waitbar(0,'Running benchmarks #1');
+catch
+    hbar=0;
+end
+count=0;
 
 cfg.nphoton=1e8;
 cfg.vol=uint8(ones(60,60,60));
@@ -56,9 +66,13 @@ for i=1:size(speed,1)
         flux.stat
         error('output absorption fraction is incorrect');
     end
+    count=count+1;
+    hbar>0 && waitbar(count/9,hbar,'Running benchmarks #1');
     speed(i,1)=flux.stat.nphoton/flux.stat.runtime;
 end
 mcxbenchmark.benchmark1.stat=flux.stat;
+
+hbar>0 && waitbar(count/9,hbar,'Running benchmarks #2');
 
 cfg.shapes='{"Shapes":[{"Sphere":{"Tag":2, "O":[30,30,30],"R":15}}]}';
 cfg.isreflect=1;
@@ -70,9 +84,13 @@ for i=1:size(speed,1)
         flux.stat
         error('output absorption fraction is incorrect');
     end
+    count=count+1;
+    hbar>0 && waitbar(count/9,hbar,'Running benchmarks #2');
     speed(i,2)=flux.stat.nphoton/flux.stat.runtime;
 end
 mcxbenchmark.benchmark2.stat=flux.stat;
+
+hbar>0 && waitbar(count/9,hbar,'Running benchmarks #3');
 
 cfg=rmfield(cfg,'shapes');
 cfg.srctype='planar';
@@ -82,11 +100,12 @@ cfg.srcpos=[10 10 -10];
 
 for i=1:size(speed,1)
     [flux, detps]=mcxlab(cfg);
-    if(abs(flux.stat.energyabs/flux.stat.energytot-0.1866)>0.005|| ...
-       abs(flux.stat.energytot-flux.stat.nphoton*0.97560903)>100)
+    if(abs(flux.stat.energyabs/flux.stat.energytot-0.1866)>0.005)
         flux.stat
         error('output absorption fraction is incorrect');
     end
+    count=count+1;
+    hbar>0 && waitbar(count/9,hbar,'Running benchmarks #3');
     speed(i,3)=flux.stat.nphoton/flux.stat.runtime;
 end
 mcxbenchmark.benchmark3.stat=flux.stat;
@@ -98,3 +117,7 @@ for i=1:length(speed)
 end
 
 mcxbenchmark.speedsum=sum(speed);
+
+if(hbar>0)
+    delete(hbar);
+end

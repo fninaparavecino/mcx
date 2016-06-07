@@ -12,8 +12,13 @@
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
-#include <ieee754.h>
 #include <stdint.h>
+
+#if defined(__clang__) || defined(_MSC_VER)
+  #include "mcx_ieee754.h"
+#else
+  #include <ieee754.h>
+#endif
 
 #define MCX_RNG_NAME       "xorshift128+"
 

@@ -20,16 +20,23 @@ OUTPUT_DIR=../bin
 
 INCLUDEDIRS=-I/usr/local/cuda/include
 
+CUDART=-lcudart
+
 ifeq ($(BACKEND),ocelot)
   LINKOPT=-L/usr/local/lib `OcelotConfig -l`
   CUCCOPT=-g -arch=sm_20 #--maxrregcount 32
+else ifeq ($(BACKEND),cudastatic)
+  CUDART=-lcudadevrt -lcudart_static -ldl -lrt -static-libgcc -static-libstdc++
+  LINKOPT=-L/usr/local/cuda/lib -lm $(CUDART)
+  CUCCOPT=-lineinfo -Xcompiler -Wall#-g #-arch compute_20 #--maxrregcount 32
 else
-  LINKOPT=-L/usr/local/cuda/lib -lcudart -lm
+  LINKOPT=-L/usr/local/cuda/lib -lm $(CUDART)
   CUCCOPT=-lineinfo -Xcompiler -Wall#-g #-arch compute_20 #--maxrregcount 32
 endif
 
 DLLFLAG=-fPIC
 OMP=-fopenmp
+CUDA_STATIC=--cudart static -Xcompiler "-static-libgcc -static-libstdc++"
 
 CPPOPT=-g -Wall -O3 -std=c99 # -DUSE_OS_TIMER
 
@@ -40,30 +47,37 @@ FILES=mcx_core mcx_utils mcx_shapes tictoc mcextreme cjson/cJSON
 
 ARCH = $(shell uname -m)
 PLATFORM = $(shell uname -s)
-ifeq ($(findstring MINGW32,$(PLATFORM)), MINGW32)
+ifeq ($(findstring CYGWIN,$(PLATFORM)), CYGWIN)
   CC=nvcc
-  LINKOPT=-L/c/CUDA/lib -lcudart --link
+  LINKOPT=-L/c/CUDA/lib $(CUDART) --link 
   INCLUDEDIRS +=-I/c/CUDA/include
   CPPOPT =-c -D_CRT_SECURE_NO_DEPRECATE -DWIN32
   OBJSUFFIX=.obj
   EXESUFFIX=.exe
   DLLFLAG=
+  OMP=-Xcompiler /openmp
+  CUCCOPT+=-Xcompiler "/openmp /W0"
+  CUDA_STATIC=--cudart static $(OMP) -Xcompiler /MT
+else ifeq ($(findstring Darwin,$(PLATFORM)), Darwin)
+  CUDA_STATIC=--cudart static
 else
+  CUCCOPT+=-Xcompiler $(OMP)
   ifeq ($(findstring x86_64,$(ARCH)), x86_64)
      CPPOPT +=-m64
      CUCCOPT +=-m64
      ifeq "$(wildcard /usr/local/cuda/lib64)" "/usr/local/cuda/lib64"
         ifeq ($(BACKEND),cuda)
-           LINKOPT=-L/usr/local/cuda/lib64 -lcudart -lm -lstdc++ $(OMP)
+           LINKOPT=-L/usr/local/cuda/lib64 $(CUDART) -lm -lstdc++
+        else ifeq ($(BACKEND),cudastatic)
+           LINKOPT=-L/usr/local/cuda/lib64 $(CUDART) -lm -static-libgcc -static-libstdc++
         endif
      endif
   endif
 endif
 
-CUCCOPT+=-Xcompiler -fopenmp
-CPPOPT+=-fopenmp
-
+CPPOPT+=$(OMP)
 CUGENCODE=-arch=sm_20
+CUOMPLINK=
 
 all logfast:CUCCOPT+=-use_fast_math
 xor:        CUCCOPT+=-DUSE_XORSHIFT128P_RAND
@@ -75,10 +89,11 @@ racing:     CUCCOPT+=-DTEST_RACING
 xoratomic:  CUCCOPT+=-DUSE_XORSHIFT128P_RAND -DUSE_ATOMIC -use_fast_math $(CUGENCODE) MCX_TARGET_NAME='"Xorshift128+ Atomic MCX"'
 logatomic:  CUCCOPT+=-DUSE_ATOMIC -use_fast_math $(CUGENCODE) -DMCX_TARGET_NAME='"LL5 Atomic MCX"'
 fermi fermimex fermioct:      CUCCOPT+=-DUSE_ATOMIC -use_fast_math
-fermimex fermioct:   OMP:=
+fermi:      LINKOPT+=$(CUOMPLINK) $(OMP)
 maxwellmex: fermimex
 maxwelloct: fermioct
 maxwellmex maxwelloct: CUCCOPT+=-DUSE_XORSHIFT128P_RAND
+maxwellmex maxwelloct: MEXCCOPT+=-DUSE_XORSHIFT128P_RAND
 maxwelloct maxwellmex: CUGENCODE=-arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code=sm_50 -code=sm_52
 
 xorbox logbox:		CUCCOPT+=-DUSE_CACHEBOX -use_fast_math $(CUGENCODE) -DMCX_TARGET_NAME='"Cachebox MCX"'
@@ -97,10 +112,11 @@ xormax:     CUCCOPT+=-DUSE_XORSHIFT128P_RAND
 
 static:     xormax
 static:     AR=nvcc
-static:     LINKOPT=--cudart static -Xcompiler "-static-libgcc -static-libstdc++ -fopenmp"
+static:     CUOMPLINK=-Xcompiler
+static:     LINKOPT=$(CUDA_STATIC)
 
 mexbox fermimex:        AR=mex
-mexbox fermimex:        LINKOPT+= CXXFLAGS='$$CXXFLAGS -DSAVE_DETECTORS -DUSE_CACHEBOX -DMCX_CONTAINER -fopenmp' -lgomp LDFLAGS='$$LDFLAGS -fopenmp'
+mexbox fermimex:        LINKOPT+= CXXFLAGS='$$CXXFLAGS -DSAVE_DETECTORS -DUSE_CACHEBOX -DMCX_CONTAINER -fopenmp $(MEXCCOPT) $(USERCCOPT)' -lgomp LDFLAGS='$$LDFLAGS -fopenmp $(USERLINKOPT)'
 mexbox oct octbox fermimex fermioct:    OUTPUT_DIR=../mcxlab
 fermimex:      BINARY=mcxlab
 fermioct:      BINARY=mcxlab.mex
@@ -109,7 +125,7 @@ mexbox octbox fermimex fermioct:    CUCCOPT+=--compiler-options "$(DLLFLAG)" -DM
 mexbox octbox fermimex fermioct:    CPPOPT+=$(DLLFLAG) -DMCX_CONTAINER
 mexbox fermimex:        LINKOPT+=mcxlab.cpp -cxx -outdir $(OUTPUT_DIR) $(INCLUDEDIRS)
 
-octbox fermioct:        AR= CXXFLAGS='-DSAVE_DETECTORS -DUSE_CACHEBOX -fopenmp' LDFLAGS='-fopenmp' mkoctfile
+octbox fermioct:        AR= CXXFLAGS='-DSAVE_DETECTORS -DUSE_CACHEBOX -fopenmp $(MEXCCOPT) $(USERCCOPT)' LDFLAGS='-fopenmp $(USERLINKOPT)' mkoctfile
 fermioct:               BINARY=mcxlab.mex
 octbox:                 BINARY=mcxlab_atom.mex
 octbox fermioct:        LINKOPT+=--mex mcxlab.cpp $(INCLUDEDIRS)
@@ -131,7 +147,7 @@ makedirs:
 
 $(OUTPUT_DIR)/$(BINARY): makedirs $(OBJS)
 $(OUTPUT_DIR)/$(BINARY): $(OBJS)
-	$(AR) $(OBJS) -o $(OUTPUT_DIR)/$(BINARY) $(LINKOPT)
+	$(AR) $(OBJS) -o $(OUTPUT_DIR)/$(BINARY) $(LINKOPT) $(USERLINKOPT)
 
 %$(OBJSUFFIX): %.c
 	$(CC) $(INCLUDEDIRS) $(CPPOPT) -c -o $@  $<

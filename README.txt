@@ -38,7 +38,7 @@ The algorithm of this software is detailed in the Reference [1].
 A short summary of the main features includes:
 
 *. 3D heterogeneous media represented by voxelated array
-*. a variety of source forms, including wide-field and pattern illuminations
+*. support over a dozen source forms, including wide-field and pattern illuminations
 *. boundary reflection support
 *. time-resolved photon transport simulations
 *. saving photon partial path lengths at the detectors
@@ -65,7 +65,10 @@ II. Requirement and Installation
 
 Please read this section carefully. The majority of failures 
 using MCX were found related to incorrect installation of CUDA 
-library and NVIDIA driver.
+library and NVIDIA driver. 
+
+Please browse http://mcx.space/#documentation for step-by-step
+instructions.
 
 For MCX-CUDA, the requirements for using this software include
 
@@ -214,7 +217,7 @@ or (use inline domain definition)
        mcx -f input.json -P '{"Shapes":[{"ZLayers":[[1,10,1],[11,30,2],[31,60,3]]}]}'
 </pre>
 
-the 2nd command above will launch 2048 GPU threads (-t) with every 64 threads
+the 2nd command above will launch 16384 GPU threads (-t) with every 64 threads
 a block (-T); a total of 1e7 photons will be simulated by the first GPU (-G 1) 
 with two equally divided runs (-r); the media/source configuration will be 
 read from input.inp (-f) and the output will be labeled with the session 
