@@ -150,28 +150,31 @@ __device__ inline float mcx_nextafterf(float a, int dir){
       return num.f-gcfg->maxvoidstep;
 }
 
-__device__ inline float hitgrid(float3 *p0, float3 *v, float *htime,float* rv,int *id){
+__device__ inline float hitgrid(float3 *p0, float *v, float *htime,float* rv,int *id){
       float dist;
 
       //time-of-flight to hit the wall in each direction
-      htime[0]=fabs((floorf(p0->x)+(v->x>0.f)-p0->x)*rv[0]); // absolute distance of travel in x/y/z
-      htime[1]=fabs((floorf(p0->y)+(v->y>0.f)-p0->y)*rv[1]);
-      htime[2]=fabs((floorf(p0->z)+(v->z>0.f)-p0->z)*rv[2]);
+      htime[0]=fabs((floorf(p0->x)+(v[0]>0.f)-p0->x)*rv[0]); // absolute distance of travel in x/y/z
+      htime[1]=fabs((floorf(p0->y)+(v[1]>0.f)-p0->y)*rv[1]);
+      htime[2]=fabs((floorf(p0->z)+(v[2]>0.f)-p0->z)*rv[2]);
 
       //get the direction with the smallest time-of-flight
       dist=fminf(fminf(htime[0],htime[1]),htime[2]);
+
       (*id)=(dist==htime[0]?0:(dist==htime[1]?1:2));
 
       //p0 is inside, p is outside, move to the 1st intersection pt, now in the air side, to be corrected in the else block
-      htime[0]=p0->x+dist*v->x;
-      htime[1]=p0->y+dist*v->y;
-      htime[2]=p0->z+dist*v->z;
+      htime[0]=p0->x+dist*v[0];
+      htime[1]=p0->y+dist*v[1];
+      htime[2]=p0->z+dist*v[2];
 
-      (*id==0) ?
+      htime[*id]= mcx_nextafterf(__float2int_rn(htime[*id]), (v[*id] > 0.f)-(v[*id] < 0.f));
+
+/*      (*id==0) ?
           (htime[0]=mcx_nextafterf(__float2int_rn(htime[0]), (v->x > 0.f)-(v->x < 0.f))) :
 	  ((*id==1) ? 
 	      (htime[1]=mcx_nextafterf(__float2int_rn(htime[1]), (v->y > 0.f)-(v->y < 0.f))) :
-	      (htime[2]=mcx_nextafterf(__float2int_rn(htime[2]), (v->z > 0.f)-(v->z < 0.f))) );
+	      (htime[2]=mcx_nextafterf(__float2int_rn(htime[2]), (v->z > 0.f)-(v->z < 0.f))) );*/
 
       return dist;
 }
@@ -230,7 +233,8 @@ __device__ inline int skipvoid(MCXpos *p,MCXdir *v,MCXtime *f,float3* rv,uchar m
 		count=0;
 		while(!(p->x>=0.f && p->y>=0.f && p->z>=0.f && p->x < gcfg->maxidx.x
                   && p->y < gcfg->maxidx.y && p->z < gcfg->maxidx.z) || !(media[idx1d] & MED_MASK)){ // at most 3 times
-                    //time-of-flight to hit the wall in each direction
+                    
+			/*//time-of-flight to hit the wall in each direction
                     htime.x=fabs((floorf(p->x)+(v->x>0.f)-p->x)*rv->x); // absolute distance of travel in x/y/z
                     htime.y=fabs((floorf(p->y)+(v->y>0.f)-p->y)*rv->y);
                     htime.z=fabs((floorf(p->z)+(v->z>0.f)-p->z)*rv->z);
@@ -249,7 +253,8 @@ __device__ inline int skipvoid(MCXpos *p,MCXdir *v,MCXtime *f,float3* rv,uchar m
 	             (htime.x=mcx_nextafterf(__float2int_rn(htime.y), (v->y > 0.f)-(v->y < 0.f))) :
 	             (htime.x=mcx_nextafterf(__float2int_rn(htime.y), (v->z > 0.f)-(v->z < 0.f))) );
 
-	            f->t+=gcfg->minaccumtime*dist;
+	            f->t+=gcfg->minaccumtime*dist;*/
+                    f->t+=gcfg->minaccumtime*hitgrid((float3*)p,&v->x,&htime.x,&rv->x,&flipdir);
 
                     *((float4*)(p))=float4(htime.x,htime.y,htime.z,p->w);
                     idx1d=(int(floorf(p->z))*gcfg->dimlen.y+int(floorf(p->y))*gcfg->dimlen.x+int(floorf(p->x)));
@@ -626,7 +631,7 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
           n1=prop.n;
 	  *((float4*)(&prop))=gproperty[mediaid & MED_MASK];
 
-	  //time-of-flight to hit the wall in each direction
+/*	  //time-of-flight to hit the wall in each direction
           htime.x=fabs((floorf(p.x)+(v->x>0.f)-p.x)*rv.x); // absolute distance of travel in x/y/z
           htime.y=fabs((floorf(p.y)+(v->y>0.f)-p.y)*rv.y);
           htime.z=fabs((floorf(p.z)+(v->z>0.f)-p.z)*rv.z);
@@ -645,7 +650,8 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 	             (htime.z=mcx_nextafterf(__float2int_rn(htime.z), (v->z > 0.f)-(v->z < 0.f))) );
 
 	  len=(gcfg->faststep) ? gcfg->minstep : dist; // propagate the photon to the first intersection to the grid
-
+*/
+          len=(gcfg->faststep) ? gcfg->minstep : hitgrid((float3*)&p,(float*)v,&(htime.x),&rv.x,&flipdir); // propagate the photon to the first intersection to the grid
 	  slen=len*prop.mus; //unitless (minstep=grid, mus=1/grid)
 
           GPUDEBUG(("p=[%f %f %f] -> <%f %f %f>*%f -> hit=[%f %f %f] flip=%d\n",p.x,p.y,p.z,v->x,v->y,v->z,len,htime.x,htime.y,htime.z,flipdir));
