@@ -230,7 +230,27 @@ __device__ inline int skipvoid(MCXpos *p,MCXdir *v,MCXtime *f,float3* rv,uchar m
 		count=0;
 		while(!(p->x>=0.f && p->y>=0.f && p->z>=0.f && p->x < gcfg->maxidx.x
                   && p->y < gcfg->maxidx.y && p->z < gcfg->maxidx.z) || !(media[idx1d] & MED_MASK)){ // at most 3 times
-	            f->t+=gcfg->minaccumtime*hitgrid((float3*)p,(float3*)v,&htime.x,&rv->x,&flipdir);
+                    //time-of-flight to hit the wall in each direction
+                    htime.x=fabs((floorf(p->x)+(v->x>0.f)-p->x)*rv->x); // absolute distance of travel in x/y/z
+                    htime.y=fabs((floorf(p->y)+(v->y>0.f)-p->y)*rv->y);
+                    htime.z=fabs((floorf(p->z)+(v->z>0.f)-p->z)*rv->z);
+
+                    //get the direction with the smallest time-of-flight
+                    float dist=fminf(fminf(htime.x,htime.y),htime.z);
+                    flipdir=(dist==htime.x?0:(dist==htime.y?1:2));
+
+                    //p0 is inside, p is outside, move to the 1st intersection pt, now in the air side, to be corrected in the else block
+                    htime.x=p->x+dist*v->x;
+                    htime.y=p->y+dist*v->y;
+                    htime.z=p->z+dist*v->z;
+
+                   (flipdir==0) ? (htime.x=mcx_nextafterf(__float2int_rn(htime.x), (v->x > 0.f)-(v->x < 0.f))) :
+	             ((flipdir==1) ? 
+	             (htime.x=mcx_nextafterf(__float2int_rn(htime.y), (v->y > 0.f)-(v->y < 0.f))) :
+	             (htime.x=mcx_nextafterf(__float2int_rn(htime.y), (v->z > 0.f)-(v->z < 0.f))) );
+
+	            f->t+=gcfg->minaccumtime*dist;
+
                     *((float4*)(p))=float4(htime.x,htime.y,htime.z,p->w);
                     idx1d=(int(floorf(p->z))*gcfg->dimlen.y+int(floorf(p->y))*gcfg->dimlen.x+int(floorf(p->x)));
                     GPUDEBUG(("entry p=[%f %f %f] flipdir=%d\n",p->x,p->y,p->z,flipdir));
@@ -435,7 +455,7 @@ __device__ inline int launchnewphoton(MCXpos *p,MCXdir *v,MCXtime *f,float3* rv,
 	      }
 	  }
           *rv=float3(__fdividef(1.f,v->x),__fdividef(1.f,v->y),__fdividef(1.f,v->z));
-	  if((*mediaid & MED_MASK)==0){
+	  if(0 && (*mediaid & MED_MASK)==0){
              int idx=skipvoid(p, v, f, rv, media); /*specular reflection of the bbx is taken care of here*/
              if(idx>=0){
 		 *idx1d=idx;
@@ -605,8 +625,27 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 
           n1=prop.n;
 	  *((float4*)(&prop))=gproperty[mediaid & MED_MASK];
-	  
-	  len=(gcfg->faststep) ? gcfg->minstep : hitgrid((float3*)&p,(float3*)v,&(htime.x),&rv.x,&flipdir); // propagate the photon to the first intersection to the grid
+
+	  //time-of-flight to hit the wall in each direction
+          htime.x=fabs((floorf(p.x)+(v->x>0.f)-p.x)*rv.x); // absolute distance of travel in x/y/z
+          htime.y=fabs((floorf(p.y)+(v->y>0.f)-p.y)*rv.y);
+          htime.z=fabs((floorf(p.z)+(v->z>0.f)-p.z)*rv.z);
+
+          //get the direction with the smallest time-of-flight
+          float dist=fminf(fminf(htime.x,htime.y),htime.z);
+          flipdir=(dist==htime.z?0:(dist==htime.y?1:2));
+
+          //p0 is inside, p is outside, move to the 1st intersection pt, now in the air side, to be corrected in the else block
+          htime.x=p.x+dist*v->x;
+          htime.y=p.y+dist*v->y;
+          htime.z=p.z+dist*v->z;
+
+          (flipdir==0) ? (htime.x=mcx_nextafterf(__float2int_rn(htime.x), (v->x > 0.f)-(v->x < 0.f))) :
+	             ((flipdir==1) ? (htime.y=mcx_nextafterf(__float2int_rn(htime.y), (v->y > 0.f)-(v->y < 0.f))) :
+	             (htime.z=mcx_nextafterf(__float2int_rn(htime.z), (v->z > 0.f)-(v->z < 0.f))) );
+
+	  len=(gcfg->faststep) ? gcfg->minstep : dist; // propagate the photon to the first intersection to the grid
+
 	  slen=len*prop.mus; //unitless (minstep=grid, mus=1/grid)
 
           GPUDEBUG(("p=[%f %f %f] -> <%f %f %f>*%f -> hit=[%f %f %f] flip=%d\n",p.x,p.y,p.z,v->x,v->y,v->z,len,htime.x,htime.y,htime.z,flipdir));
