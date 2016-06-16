@@ -30,7 +30,15 @@
   #include <omp.h>
 #endif
 
-#define RAND_BUF_LEN 5
+#if defined(USE_XORSHIFT128P_RAND)
+    #define RAND_BUF_LEN 4
+#elif defined(USE_POSIX_RAND)
+    #define RAND_BUF_LEN 4
+#elif defined(USE_MT_RAND)
+    #define RAND_BUF_LEN 0
+#else
+    #define RAND_BUF_LEN 5
+#endif
 
 #define GET_1ST_FIELD(x,y)  if(strcmp(name,#y)==0) {double *val=mxGetPr(item);x->y=val[0];printf("mcx.%s=%g;\n",#y,(float)(x->y));}
 #define GET_ONE_FIELD(x,y)  else GET_1ST_FIELD(x,y)
@@ -40,13 +48,6 @@
                                  printf("mcx.%s=[%g %g %g %g];\n",#v,(float)(u->v.x),(float)(u->v.y),(float)(u->v.z),(float)(u->v.w));}
 
 #define SET_GPU_INFO(output,id,v)  mxSetField(output,id,#v,mxCreateDoubleScalar(gpuinfo[i].v));
-
-#ifdef USE_MT_RAND
-    #define RAND_BUF_LEN 0
-#else
-    #define RAND_BUF_LEN 5
-#endif
-
 
 void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg);
 void mcx_validate_config(Config *cfg);
@@ -123,6 +124,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
       plhs[2] = mxCreateStructMatrix(ncfg,1,1,outputtag);
   if(nlhs>=4)
       plhs[3] = mxCreateStructMatrix(ncfg,1,1,outputtag);
+  if(nlhs>=5)
+      plhs[4] = mxCreateStructMatrix(ncfg,1,1,outputtag);
 
   for (jstruct = 0; jstruct < ncfg; jstruct++) {  /* how many configs */
     try{
@@ -164,8 +167,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
         if(nlhs>=4){
 	    cfg.seeddata=malloc(cfg.maxdetphoton*sizeof(float)*RAND_BUF_LEN);
 	}
+        if(nlhs>=5){
+	    cfg.exportdebugdata=(float*)malloc(cfg.maxjumpdebug*sizeof(float)*MCX_DEBUG_REC_LEN);
+	}
         mcx_validate_config(&cfg);
-
 #ifdef _OPENMP
         omp_set_num_threads(activedev);
 #pragma omp parallel
@@ -178,6 +183,16 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
 }
 #endif
 
+        if(nlhs>=5){
+            fielddim[0]=MCX_DEBUG_REC_LEN; fielddim[1]=cfg.debugdatalen; // his.savedphoton is for one repetition, should correct
+    	    fielddim[2]=0; fielddim[3]=0;
+            mxSetFieldByNumber(plhs[4],jstruct,0, mxCreateNumericArray(2,fielddim,mxSINGLE_CLASS,mxREAL));
+	    if(cfg.debuglevel & MCX_DEBUG_MOVE)
+                memcpy((float*)mxGetPr(mxGetFieldByNumber(plhs[4],jstruct,0)),cfg.exportdebugdata,fielddim[0]*fielddim[1]*sizeof(float));
+	    if(cfg.exportdebugdata)
+	        free(cfg.exportdebugdata);
+            cfg.exportdebugdata=NULL;
+	}
         if(nlhs>=4){
             fielddim[0]=(cfg.issaveseed>0)*RAND_BUF_LEN*sizeof(float); fielddim[1]=cfg.detectedcount; // his.savedphoton is for one repetition, should correct
     	    fielddim[2]=0; fielddim[3]=0;
@@ -250,6 +265,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
     }catch(...){
       mexPrintf("Unknown Exception");
     }
+
     if(detps)
        free(detps);
     mcx_cleargpuinfo(&gpuinfo);
@@ -294,6 +310,8 @@ void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg)
     GET_ONE_FIELD(cfg,issaveseed)
     GET_ONE_FIELD(cfg,replaydet)
     GET_ONE_FIELD(cfg,faststep)
+    GET_ONE_FIELD(cfg,maxvoidstep)
+    GET_ONE_FIELD(cfg,maxjumpdebug)
     GET_VEC3_FIELD(cfg,srcpos)
     GET_VEC3_FIELD(cfg,srcdir)
     GET_VEC3_FIELD(cfg,steps)
@@ -379,7 +397,7 @@ void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg)
 	printf("mcx.outputtype='%s';\n",outputstr);
     }else if(strcmp(name,"debuglevel")==0){
         int len=mxGetNumberOfElements(item);
-        const char debugflag[]={'R','\0'};
+        const char debugflag[]={'R','M','\0'};
         char debuglevel[MAX_SESSION_LENGTH]={'\0'};
 
         if(!mxIsChar(item) || len==0)
@@ -597,7 +615,7 @@ void mcx_validate_config(Config *cfg){
 }
 
 extern "C" int mcx_throw_exception(const int id, const char *msg, const char *filename, const int linenum){
-     printf("MCXLAB ERROR %d in unit %s:%d\n",id,filename,linenum);
+     printf("MCXLAB ERROR %d in unit %s:%d: %s\n",id,filename,linenum,msg);
      throw msg;
      return id;
 }
