@@ -1,39 +1,3 @@
-/*********************************************************************************** \
- * Copyright (c) 2015, NVIDIA open source projects
- * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- * 
- * - Redistributions of source code must retain the above copyright notice, this
- *   list of conditions and the following disclaimer.
- * 
- * - Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- * 
- * - Neither the name of SASSI nor the names of its
- *   contributors may be used to endorse or promote products derived from
- *   this software without specific prior written permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * This example shows how to use SASSI to inspect the control flow graph.
- *
- * The application code the user instruments should be instrumented with the
- * following SASSI flags: -Xptxas --sassi-function-entry -Xptxas --sassi-bb-entry
- *  
-\***********************************************************************************/
-
 #include <algorithm>
 #include <assert.h>
 #include <cupti.h>
@@ -52,7 +16,7 @@
 // Create a memory pool that we can populate on the device and read on the host.
 static __managed__ uint8_t sassi_mempool[POOLSIZE];
 static __managed__ int     sassi_mempool_cur;
-
+static __managed__ char fnNameParam[MAX_FN_STR_LEN];
 // A structure to record a basic block.  We will perform a deep copy
 // of SASSI's SASSIBasicBlockParams for each basic block.
 struct BLOCK {
@@ -123,6 +87,8 @@ __device__ void sassi_function_entry(SASSIFunctionParams* fp)
   CFG *cPtr = *(sassi_cfg->getOrInit((int64_t)fp, [numBlocks, blocks, fp](CFG **cfg) {
       CFG *cPtr = (CFG*) simple_malloc(sizeof(CFG));
       simple_strncpy(cPtr->fnName, fp->GetFnName());
+      simple_strncpy(fnNameParam, fp->GetFnName());
+      printf("Function name: %s", fnNameParam);
       cPtr->numBlocks = numBlocks;
       cPtr->blocks = (BLOCK*) simple_malloc(sizeof(BLOCK) * numBlocks);
       *cfg = cPtr;
