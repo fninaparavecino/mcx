@@ -1,5 +1,5 @@
-TARGET := matrixMul
-OBJECTS := matrixMul.o
+TARGET := kernelMatrixMul
+OBJECTS := kernelMatrixMul.o
 
 # Copy the environment from env.mk
 include ../instlibs/env.mk
