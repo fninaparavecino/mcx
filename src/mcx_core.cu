@@ -984,10 +984,14 @@ int mcx_list_gpu(Config *cfg, GPUInfo **info){
 	(*info)[dev].clock=dp.clockRate;
 	(*info)[dev].sm=dp.multiProcessorCount;
 	(*info)[dev].core=dp.multiProcessorCount*mcx_corecount(dp.major,dp.minor);
-	(*info)[dev].maxmpthread=dp.maxThreadsPerMultiProcessor;
+#ifdef USE_MT_RAND
+	(*info)[dev].autoblock=1;
+#else
+	(*info)[dev].autoblock=32;
+#endif
+	(*info)[dev].autothread=(*info)[dev].core*32;
+//	(*info)[dev].maxmpthread=dp.maxThreadsPerMultiProcessor;
         (*info)[dev].maxgate=cfg->maxgate;
-        (*info)[dev].autoblock=(*info)[dev].maxmpthread / mcx_smxblock(dp.major,dp.minor);
-        (*info)[dev].autothread=(*info)[dev].autoblock * mcx_smxblock(dp.major,dp.minor) * (*info)[dev].sm;
 
         if (strncmp(dp.name, "Device Emulation", 16)) {
 	  if(cfg->isgpuinfo){
