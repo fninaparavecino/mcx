@@ -329,10 +329,8 @@ __device__ inline int launchnewphoton(MCXpos *p,MCXdir *v,MCXtime *f,float3* rv,
 	  *((float4*)f)=float4(0.f,0.f,gcfg->minaccumtime,f->ndone);
           *idx1d=gcfg->idx1dorig;
           *mediaid=gcfg->mediaidorig;
-	  /*if(gcfg->issaveseed)
-              copystate(t,photonseed);*/
-          for(int i=0;i<gcfg->issaveseed*RAND_BUF_LEN;i++)
-                photonseed[i]=t[i];
+	  if(gcfg->issaveseed)
+              copystate(t,photonseed);
 
 	  switch(mcxsource) {
 		case(MCX_SRC_PLANAR):
@@ -578,19 +576,15 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
      float3 rv;               //reciprocal velocity
 
      //for MT RNG, these will be zero-length arrays and be optimized out
-     /*RandType t[RAND_BUF_LEN];
-     RandType photonseed[RAND_BUF_LEN];*/
-     RandType *t=(RandType*)(sharedmem+(blockDim.x<<2)+threadIdx.x*(RAND_BUF_LEN*3));
-     RandType *tnew=t+RAND_BUF_LEN;
-     RandType *photonseed=tnew+RAND_BUF_LEN;
+     RandType t[RAND_BUF_LEN];
+     RandType photonseed[RAND_BUF_LEN];
      Medium prop;    //can become float2 if no reflection (mua/musp is in 1/grid unit)
 
      float len, slen;
      float w0,Lmove;
      int   flipdir=-1;
  
-     //float *ppath=sharedmem+(blockDim.x<<2); // first blockDim.x<<2 stores v for all threads
-     float *ppath=sharedmem+blockDim.x*(RAND_BUF_LEN*3+4);
+     float *ppath=sharedmem+(blockDim.x<<2); // first blockDim.x<<2 stores v for all threads
 #ifdef  USE_CACHEBOX
   #ifdef  SAVE_DETECTORS
      float *cachebox=ppath+(gcfg->savedet ? blockDim.x*gcfg->maxmedia: 0);
@@ -1352,8 +1346,7 @@ void mcx_run_simulation(Config *cfg,GPUInfo *gpu){
 
 	 The calculation of the energy conservation will only reflect the last simulation.
      */
-     //sharedbuf=gpu[gpuid].autoblock*(sizeof(RandType)*RAND_BUF_LEN+sizeof(MCXdir));
-     sharedbuf=gpu[gpuid].autoblock*(sizeof(RandType)*RAND_SEED_LEN*3+sizeof(MCXdir));
+     sharedbuf=gpu[gpuid].autoblock*(sizeof(RandType)*RAND_BUF_LEN+sizeof(MCXdir));
 #ifdef  USE_CACHEBOX
      if(cfg->sradius>EPS || ABS(cfg->sradius+1.f)<EPS)
         sharedbuf+=sizeof(float)*((cp1.x-cp0.x+1)*(cp1.y-cp0.y+1)*(cp1.z-cp0.z+1));

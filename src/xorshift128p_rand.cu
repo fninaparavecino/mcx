@@ -24,7 +24,7 @@
 
 #define RAND_BUF_LEN       2        //register arrays
 #define LOG_MT_MAX         22.1807097779182f
-#define RAND_SEED_LEN      4        //128 bit/8 byte seed needed
+
 typedef uint64_t  RandType;
 
 __device__ float xorshift128p_nextf(RandType t[RAND_BUF_LEN]){
