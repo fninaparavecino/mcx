@@ -331,8 +331,8 @@ __device__ inline int launchnewphoton(MCXpos *p,MCXdir *v,MCXtime *f,float3* rv,
           *mediaid=gcfg->mediaidorig;
 	  /*if(gcfg->issaveseed)
               copystate(t,photonseed);*/
-          for(int i=0; i<gcfg->issaveseed*RAND_BUF_LEN; i++)
-              photonseed[i] = t[i];
+          for(int i=0;i<gcfg->issaveseed*RAND_BUF_LEN;i++)
+                photonseed[i]=t[i];
 
 	  switch(mcxsource) {
 		case(MCX_SRC_PLANAR):
@@ -579,13 +579,12 @@ kernel void mcx_main_loop(uchar media[],float field[],float genergy[],uint n_see
 
      //for MT RNG, these will be zero-length arrays and be optimized out
      /*RandType t[RAND_BUF_LEN];
-     RandType photonseed[RAND_BUF_LEN];
-     Medium prop;    //can become float2 if no reflection (mua/musp is in 1/grid unit)*/
+     RandType photonseed[RAND_BUF_LEN];*/
+     RandType *t=(RandType*)(sharedmem+(blockDim.x<<2)+threadIdx.x*(RAND_BUF_LEN*3));
+     RandType *tnew=t+RAND_BUF_LEN;
+     RandType *photonseed=tnew+RAND_BUF_LEN;
+     Medium prop;    //can become float2 if no reflection (mua/musp is in 1/grid unit)
 
-     RandType *t = (RandType*)(sharedmem+(blockDim.x<<2)+threadIdx.x*(RAND_BUF_LEN*3));
-     RandType *tnew = t + RAND_BUF_LEN;
-     RandType *photonseed = tnew + RAND_BUF_LEN;
-     Medium prop;
      float len, slen;
      float w0,Lmove;
      int   flipdir=-1;
@@ -991,14 +990,10 @@ int mcx_list_gpu(Config *cfg, GPUInfo **info){
 	(*info)[dev].clock=dp.clockRate;
 	(*info)[dev].sm=dp.multiProcessorCount;
 	(*info)[dev].core=dp.multiProcessorCount*mcx_corecount(dp.major,dp.minor);
-#ifdef USE_MT_RAND
-	(*info)[dev].autoblock=1;
-#else
-	(*info)[dev].autoblock=32;
-#endif
-	(*info)[dev].autothread=(*info)[dev].core*32;
-//	(*info)[dev].maxmpthread=dp.maxThreadsPerMultiProcessor;
+	(*info)[dev].maxmpthread=dp.maxThreadsPerMultiProcessor;
         (*info)[dev].maxgate=cfg->maxgate;
+        (*info)[dev].autoblock=(*info)[dev].maxmpthread / mcx_smxblock(dp.major,dp.minor);
+        (*info)[dev].autothread=(*info)[dev].autoblock * mcx_smxblock(dp.major,dp.minor) * (*info)[dev].sm;
 
         if (strncmp(dp.name, "Device Emulation", 16)) {
 	  if(cfg->isgpuinfo){
