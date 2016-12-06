@@ -21,7 +21,7 @@
 #endif
 
 #define MCX_RNG_NAME       "xorshift128+"
-
+#define RAND_SEED_LEN      4        //128 bit/8 byte seed needed
 #define RAND_BUF_LEN       2        //register arrays
 #define LOG_MT_MAX         22.1807097779182f
 
