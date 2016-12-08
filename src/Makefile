@@ -91,14 +91,14 @@ CUGENCODE=-arch=sm_20
 OUTPUTFLAG:=-o
 
 logfast:    CUCCOPT+=-use_fast_math
-xor:        CUCCOPT+=
-xor:        LINKOPT+=
-fast:       CUCCOPT+=-use_fast_math
+xor:        CUCCOPT+=-DUSE_XORSHIFT128P_RAND
+xor:        LINKOPT+=-DUSE_XORSHIFT128P_RAND
+fast:       CUCCOPT+=-DUSE_XORSHIFT128P_RAND -use_fast_math
 log:        CUCCOPT+=
-#debugxor:   xor
+debugxor:   xor
 debuglog:   CUCCOPT+=
 racing:     CUCCOPT+=-DTEST_RACING
-xoratomic:  CUCCOPT+=-DUSE_ATOMIC -use_fast_math $(CUGENCODE)
+xoratomic:  CUCCOPT+=-DUSE_XORSHIFT128P_RAND -DUSE_ATOMIC -use_fast_math $(CUGENCODE) MCX_TARGET_NAME='"Xorshift128+ Atomic MCX"'
 logatomic:  CUCCOPT+=-DUSE_ATOMIC -use_fast_math $(CUGENCODE) -DMCX_TARGET_NAME='"LL5 Atomic MCX"'
 fermi fermimex fermioct:      CUCCOPT+=-DUSE_ATOMIC -use_fast_math
 fermi fermimex fermioct:      xor
@@ -107,8 +107,8 @@ fermimex fermioct: OUTPUTFLAG:=-output
 fermi:      LINKOPT+=$(CUOMPLINK) $(OMP)
 maxwellmex pascalmex: fermimex
 maxwelloct pascaloct: fermioct
-maxwellmex maxwelloct pascalmex pascaloct: CUCCOPT+=
-maxwellmex maxwelloct pascalmex pascaloct: MEXCCOPT+=
+maxwellmex maxwelloct pascalmex pascaloct: CUCCOPT+=-DUSE_XORSHIFT128P_RAND
+maxwellmex maxwelloct pascalmex pascaloct: MEXCCOPT+=-DUSE_XORSHIFT128P_RAND
 maxwelloct maxwellmex: CUGENCODE=-arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code=sm_50 -code=sm_52
 pascaloct  pascalmex:  CUGENCODE=-arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code=sm_50 -code=sm_52 -code=sm_61
 
@@ -126,7 +126,7 @@ maxwell:    CUGENCODE=-arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code
 pascal:     CUGENCODE=-arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code=sm_50 -code=sm_52 -code=sm_61
 xormax:     maxwell
 xorpas:     pascal
-xormax xorpas:     CUCCOPT+=
+xormax xorpas:     CUCCOPT+=-DUSE_XORSHIFT128P_RAND
 
 
 static:     xormax
