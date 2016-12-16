@@ -95,7 +95,7 @@ xor:        CUCCOPT+=-DUSE_XORSHIFT128P_RAND
 xor:        LINKOPT+=-DUSE_XORSHIFT128P_RAND
 fast:       CUCCOPT+=-DUSE_XORSHIFT128P_RAND -use_fast_math
 log:        CUCCOPT+=
-debugxor:   xor
+#debugxor:   xor
 debuglog:   CUCCOPT+=
 racing:     CUCCOPT+=-DTEST_RACING
 xoratomic:  CUCCOPT+=-DUSE_XORSHIFT128P_RAND -DUSE_ATOMIC -use_fast_math $(CUGENCODE) MCX_TARGET_NAME='"Xorshift128+ Atomic MCX"'
