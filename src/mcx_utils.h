@@ -22,7 +22,7 @@
 #define MIN(a,b)           ((a)<(b)?(a):(b))
 #define MAX(a,b)           ((a)>(b)?(a):(b))
 
-enum TOutputType {otFlux, otFluence, otEnergy, otJacobian, otTaylor};
+enum TOutputType {otFlux, otFluence, otEnergy, otJacobian, otWP};
 enum TMCXParent  {mpStandalone, mpMATLAB};
 
 typedef struct MCXMedium{
@@ -43,7 +43,8 @@ typedef struct MCXHistoryHeader{
 	unsigned int  savedphoton;
 	float unitinmm;
 	unsigned int  seedbyte;
-	int reserved[6];
+        float normalizer;
+	int reserved[5];
 } History;
 
 typedef struct PhotonReplay{
@@ -72,8 +73,8 @@ typedef struct MCXConfig{
 	unsigned int nthread;      /**<num of total threads, multiple of 128*/
 	int seed;         /**<random number generator seed*/
 
-	float3 srcpos;    /**<src position in mm*/
-	float3 srcdir;    /**<src normal direction*/
+	float4 srcpos;    /**<src position in mm*/
+	float4 srcdir;    /**<src normal direction*/
 	float tstart;     /**<start time in second*/
 	float tstep;      /**<time step in second*/
 	float tend;       /**<end time in second*/
@@ -113,6 +114,8 @@ typedef struct MCXConfig{
         char isdumpmask;    /**<1 dump detector mask; 0 not*/
 	char autopilot;     /**<1 optimal setting for dedicated card, 2, for non dedicated card*/
 	char issaveseed;    /**<1 save the seed for a detected photon, 0 do not save*/
+	char issaveexit;    /**<1 save the exit position and dir of a detected photon, 0 do not save*/
+	char issaveref;     /**<1 save diffuse reflectance at the boundary voxels, 0 do not save*/
 	char srctype;       /**<0:pencil,1:isotropic,2:cone,3:gaussian,4:planar,5:pattern,\
                                 6:fourier,7:arcsine,8:disk,9:fourierx,10:fourierx2d,11:zgaussian,12:line,13:slit*/
         char outputtype;    /**<'X' output is flux, 'F' output is fluence, 'E' energy deposit*/
@@ -165,7 +168,7 @@ void mcx_parsecmd(int argc, char* argv[], Config *cfg);
 void mcx_usage(Config *cfg,char *exename);
 void mcx_printheader(Config *cfg);
 void mcx_loadvolume(char *filename,Config *cfg);
-void mcx_normalize(float field[], float scale, int fieldlen);
+void mcx_normalize(float field[], float scale, int fieldlen, int option);
 int  mcx_readarg(int argc, char *argv[], int id, void *output,const char *type);
 void mcx_printlog(Config *cfg, char *str);
 int  mcx_remap(char *opt);
@@ -180,12 +183,15 @@ void mcx_savedetphoton(float *ppath, void *seeds, int count, int seedbyte, Confi
 void mcx_loadseedfile(Config *cfg);
 void mcx_cleargpuinfo(GPUInfo **gpuinfo);
 int  mcx_isbinstr(const char * str);
+void mcx_progressbar(float percent, Config *cfg);
+void mcx_flush(Config *cfg);
 
 #ifdef MCX_CONTAINER
 #ifdef __cplusplus
 extern "C"
 #endif
- int mcx_throw_exception(const int id, const char *msg, const char *filename, const int linenum);
+ int  mcx_throw_exception(const int id, const char *msg, const char *filename, const int linenum);
+ void mcx_matlab_flush(void);
 #endif
 
 #ifdef MCX_CONTAINER

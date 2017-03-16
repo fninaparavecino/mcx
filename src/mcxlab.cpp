@@ -31,19 +31,21 @@
 #endif
 
 #if defined(USE_XORSHIFT128P_RAND)
-    #define RAND_BUF_LEN 4
+    #define RAND_WORD_LEN 4
 #elif defined(USE_POSIX_RAND)
-    #define RAND_BUF_LEN 4
+    #define RAND_WORD_LEN 4
 #elif defined(USE_MT_RAND)
-    #define RAND_BUF_LEN 0
+    #define RAND_WORD_LEN 0
 #else
-    #define RAND_BUF_LEN 5
+    #define RAND_WORD_LEN 5
 #endif
 
 #define GET_1ST_FIELD(x,y)  if(strcmp(name,#y)==0) {double *val=mxGetPr(item);x->y=val[0];printf("mcx.%s=%g;\n",#y,(float)(x->y));}
 #define GET_ONE_FIELD(x,y)  else GET_1ST_FIELD(x,y)
 #define GET_VEC3_FIELD(u,v) else if(strcmp(name,#v)==0) {double *val=mxGetPr(item);u->v.x=val[0];u->v.y=val[1];u->v.z=val[2];\
                                  printf("mcx.%s=[%g %g %g];\n",#v,(float)(u->v.x),(float)(u->v.y),(float)(u->v.z));}
+#define GET_VEC34_FIELD(u,v) else if(strcmp(name,#v)==0) {double *val=mxGetPr(item);u->v.x=val[0];u->v.y=val[1];u->v.z=val[2];if(mxGetNumberOfElements(item)==4) u->v.w=val[3];\
+                                 printf("mcx.%s=[%g %g %g %g];\n",#v,(float)(u->v.x),(float)(u->v.y),(float)(u->v.z),(float)(u->v.w));}
 #define GET_VEC4_FIELD(u,v) else if(strcmp(name,#v)==0) {double *val=mxGetPr(item);u->v.x=val[0];u->v.y=val[1];u->v.z=val[2];u->v.w=val[3];\
                                  printf("mcx.%s=[%g %g %g %g];\n",#v,(float)(u->v.x),(float)(u->v.y),(float)(u->v.z),(float)(u->v.w));}
 
@@ -65,8 +67,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
   int        ncfg, nfields;
   int        fielddim[4];
   int        activedev=0;
+  int        errorflag=0;
+  int        threadid=0;
   const char       *outputtag[]={"data"};
-  const char       *datastruct[]={"data","stat"};
+  const char       *datastruct[]={"data","stat","dref"};
   const char       *statstruct[]={"runtime","nphoton","energytot","energyabs","normalizer","workload"};
   const char       *gpuinfotag[]={"name","id","devcount","major","minor","globalmem",
                                   "constmem","sharedmem","regcount","clock","sm","core",
@@ -117,7 +121,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
   ncfg = mxGetNumberOfElements(prhs[0]);
 
   if(nlhs>=1)
-      plhs[0] = mxCreateStructMatrix(ncfg,1,2,datastruct);
+      plhs[0] = mxCreateStructMatrix(ncfg,1,3,datastruct);
   if(nlhs>=2)
       plhs[1] = mxCreateStructMatrix(ncfg,1,1,outputtag);
   if(nlhs>=3)
@@ -140,11 +144,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
 	    }
 	    mcx_set_field(prhs[0],tmp,ifield,&cfg);
 	}
-#ifndef MATLAB_MEX_FILE
-        mexEvalString("fflush(stdout);");
-#else
-	mexEvalString("drawnow;");
-#endif
+	mcx_flush(&cfg);
+
 	cfg.issave2pt=(nlhs>=1);
 	cfg.issavedet=(nlhs>=2);
 	cfg.issaveseed=(nlhs>=4);
@@ -162,10 +163,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
 	    cfg.exportfield = (float*)calloc(fieldlen,sizeof(float));
 	}
 	if(nlhs>=2){
-	    cfg.exportdetected=(float*)malloc((cfg.medianum+1)*cfg.maxdetphoton*sizeof(float));
+	    cfg.exportdetected=(float*)malloc((cfg.medianum+1+cfg.issaveexit*6)*cfg.maxdetphoton*sizeof(float));
         }
         if(nlhs>=4){
-	    cfg.seeddata=malloc(cfg.maxdetphoton*sizeof(float)*RAND_BUF_LEN);
+	    cfg.seeddata=malloc(cfg.maxdetphoton*sizeof(float)*RAND_WORD_LEN);
 	}
         if(nlhs>=5){
 	    cfg.exportdebugdata=(float*)malloc(cfg.maxjumpdebug*sizeof(float)*MCX_DEBUG_REC_LEN);
@@ -173,15 +174,30 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
         mcx_validate_config(&cfg);
 #ifdef _OPENMP
         omp_set_num_threads(activedev);
-#pragma omp parallel
+#pragma omp parallel shared(errorflag)
 {
+        threadid=omp_get_thread_num();
 #endif
+        try{
 
-        mcx_run_simulation(&cfg,gpuinfo);
+            mcx_run_simulation(&cfg,gpuinfo);
 
+        }catch(const char *err){
+	    mexPrintf("Error from thread (%d): %s\n",threadid,err);
+	    errorflag++;
+	}catch(const std::exception &err){
+	    mexPrintf("C++ Error from thread (%d): %s\n",threadid,err.what());
+	    errorflag++;
+	}catch(...){
+	    mexPrintf("Unknown Exception from thread (%d)",threadid);
+	    errorflag++;
+	}
 #ifdef _OPENMP
 }
 #endif
+
+        if(errorflag)
+            mexErrMsgTxt("MCXLAB Terminated due to an exception!");
 
         if(nlhs>=5){
             fielddim[0]=MCX_DEBUG_REC_LEN; fielddim[1]=cfg.debugdatalen; // his.savedphoton is for one repetition, should correct
@@ -194,10 +210,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
             cfg.exportdebugdata=NULL;
 	}
         if(nlhs>=4){
-            fielddim[0]=(cfg.issaveseed>0)*RAND_BUF_LEN*sizeof(float); fielddim[1]=cfg.detectedcount; // his.savedphoton is for one repetition, should correct
+            fielddim[0]=(cfg.issaveseed>0)*RAND_WORD_LEN*sizeof(float); fielddim[1]=cfg.detectedcount; // his.savedphoton is for one repetition, should correct
     	    fielddim[2]=0; fielddim[3]=0;
-		    mxSetFieldByNumber(plhs[3],jstruct,0, mxCreateNumericArray(2,fielddim,mxUINT8_CLASS,mxREAL));
-		    memcpy((unsigned char*)mxGetPr(mxGetFieldByNumber(plhs[3],jstruct,0)),cfg.seeddata,fielddim[0]*fielddim[1]);
+	    mxSetFieldByNumber(plhs[3],jstruct,0, mxCreateNumericArray(2,fielddim,mxUINT8_CLASS,mxREAL));
+	    memcpy((unsigned char*)mxGetPr(mxGetFieldByNumber(plhs[3],jstruct,0)),cfg.seeddata,fielddim[0]*fielddim[1]);
 	    free(cfg.seeddata);
             cfg.seeddata=NULL;
 	}
@@ -211,7 +227,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
             }
 	}
 	if(nlhs>=2){
-            fielddim[0]=(cfg.medianum+1); fielddim[1]=cfg.detectedcount; 
+            fielddim[0]=(cfg.medianum+1+cfg.issaveexit*6); fielddim[1]=cfg.detectedcount; 
             fielddim[2]=0; fielddim[3]=0;
             if(cfg.detectedcount>0){
                     mxSetFieldByNumber(plhs[1],jstruct,0, mxCreateNumericArray(2,fielddim,mxSINGLE_CLASS,mxREAL));
@@ -222,11 +238,27 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]){
             cfg.exportdetected=NULL;
 	}
         if(nlhs>=1){
+	    int fieldlen;
             fielddim[0]=cfg.dim.x; fielddim[1]=cfg.dim.y; 
 	    fielddim[2]=cfg.dim.z; fielddim[3]=(int)((cfg.tend-cfg.tstart)/cfg.tstep+0.5);
+	    fieldlen=fielddim[0]*fielddim[1]*fielddim[2]*fielddim[3];
+            if(cfg.issaveref){
+	        float *dref=(float *)malloc(fieldlen*sizeof(float));
+		memcpy(dref,cfg.exportfield,fieldlen*sizeof(float));
+		for(int i=0;i<fieldlen;i++){
+		    if(dref[i]<0.f){
+		        dref[i]=-dref[i];
+			cfg.exportfield[i]=0.f;
+		    }else
+		        dref[i]=0.f;
+		}
+	        mxSetFieldByNumber(plhs[0],jstruct,2, mxCreateNumericArray(4,fielddim,mxSINGLE_CLASS,mxREAL));
+                memcpy((float*)mxGetPr(mxGetFieldByNumber(plhs[0],jstruct,2)),dref,fieldlen*sizeof(float));
+		free(dref);
+	    }
 	    mxSetFieldByNumber(plhs[0],jstruct,0, mxCreateNumericArray(4,fielddim,mxSINGLE_CLASS,mxREAL));
-            memcpy((float*)mxGetPr(mxGetFieldByNumber(plhs[0],jstruct,0)),cfg.exportfield,
-                         fielddim[0]*fielddim[1]*fielddim[2]*fielddim[3]*sizeof(float));
+	    memcpy((float*)mxGetPr(mxGetFieldByNumber(plhs[0],jstruct,0)),cfg.exportfield,
+                         fieldlen*sizeof(float));
             free(cfg.exportfield);
             cfg.exportfield=NULL;
 
@@ -308,12 +340,14 @@ void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg)
     GET_ONE_FIELD(cfg,printnum)
     GET_ONE_FIELD(cfg,voidtime)
     GET_ONE_FIELD(cfg,issaveseed)
+    GET_ONE_FIELD(cfg,issaveref)
+    GET_ONE_FIELD(cfg,issaveexit)
     GET_ONE_FIELD(cfg,replaydet)
     GET_ONE_FIELD(cfg,faststep)
     GET_ONE_FIELD(cfg,maxvoidstep)
     GET_ONE_FIELD(cfg,maxjumpdebug)
     GET_VEC3_FIELD(cfg,srcpos)
-    GET_VEC3_FIELD(cfg,srcdir)
+    GET_VEC34_FIELD(cfg,srcdir)
     GET_VEC3_FIELD(cfg,steps)
     GET_VEC3_FIELD(cfg,crop0)
     GET_VEC3_FIELD(cfg,crop1)
@@ -381,7 +415,7 @@ void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg)
 	printf("mcx.srctype='%s';\n",strtypestr);
     }else if(strcmp(name,"outputtype")==0){
         int len=mxGetNumberOfElements(item);
-        const char *outputtype[]={"flux","fluence","energy","jacobian",""};
+        const char *outputtype[]={"flux","fluence","energy","jacobian","nscat",""};
         char outputstr[MAX_SESSION_LENGTH]={'\0'};
 
         if(!mxIsChar(item) || len==0)
@@ -397,7 +431,7 @@ void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg)
 	printf("mcx.outputtype='%s';\n",outputstr);
     }else if(strcmp(name,"debuglevel")==0){
         int len=mxGetNumberOfElements(item);
-        const char debugflag[]={'R','M','\0'};
+        const char debugflag[]={'R','M','P','\0'};
         char debuglevel[MAX_SESSION_LENGTH]={'\0'};
 
         if(!mxIsChar(item) || len==0)
@@ -445,7 +479,7 @@ void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg)
         }else{
 	    seedbyte=arraydim[0];
             cfg->replay.seed=malloc(arraydim[0]*arraydim[1]);
-            if(arraydim[0]!=sizeof(float)*RAND_BUF_LEN)
+            if(arraydim[0]!=sizeof(float)*RAND_WORD_LEN)
                 mexErrMsgTxt("the row number of cfg.seed does not match RNG seed byte-length");
             memcpy(cfg->replay.seed,mxGetData(item),arraydim[0]*arraydim[1]);
             cfg->seed=SEED_FROM_FILE;
@@ -503,6 +537,8 @@ void mcx_set_field(const mxArray *root,const mxArray *item,int idx, Config *cfg)
 
 void mcx_replay_prep(Config *cfg){
     int i,j;
+    if(cfg->seed==SEED_FROM_FILE && detps==NULL)
+        mexErrMsgTxt("you give cfg.seed for replay, but did not specify cfg.detphotons.\nPlease define it as the detphoton output from the baseline simulation");
     if(detps==NULL || cfg->seed!=SEED_FROM_FILE)
         return;
     if(cfg->nphoton!=dimdetps[1])
@@ -519,6 +555,7 @@ void mcx_replay_prep(Config *cfg){
             if(i!=cfg->nphoton)
                 memcpy((char *)(cfg->replay.seed)+cfg->nphoton*seedbyte, (char *)(cfg->replay.seed)+i*seedbyte, seedbyte);
             cfg->replay.weight[cfg->nphoton]=1.f;
+	    cfg->replay.tof[cfg->nphoton]=0.f;
             for(j=2;j<cfg->medianum+1;j++){
                 cfg->replay.weight[cfg->nphoton]*=expf(-cfg->prop[j-1].mua*detps[i*dimdetps[0]+j]*cfg->unitinmm);
                 cfg->replay.tof[cfg->nphoton]+=detps[i*dimdetps[0]+j]*cfg->unitinmm*R_C0*cfg->prop[j-1].n;
@@ -575,6 +612,11 @@ void mcx_validate_config(Config *cfg){
      if(cfg->steps.x!=1.f && cfg->unitinmm==1.f)
         cfg->unitinmm=cfg->steps.x;
 
+     if(cfg->medianum){
+        for(int i=0;i<cfg->medianum;i++)
+             if(cfg->prop[i].mus==0.f)
+	         cfg->prop[i].mus=EPS;
+     }
      if(cfg->unitinmm!=1.f){
         cfg->steps.x=cfg->unitinmm; cfg->steps.y=cfg->unitinmm; cfg->steps.z=cfg->unitinmm;
         for(i=1;i<cfg->medianum;i++){
@@ -584,8 +626,10 @@ void mcx_validate_config(Config *cfg){
      }
      if(cfg->issavedet && cfg->detnum==0) 
       	cfg->issavedet=0;
+     if(cfg->issavedet==0)
+         cfg->issaveexit=0;
      if(cfg->seed<0 && cfg->seed!=SEED_FROM_FILE) cfg->seed=time(NULL);
-     if(cfg->outputtype==otJacobian && cfg->seed!=SEED_FROM_FILE)
+     if((cfg->outputtype==otJacobian || cfg->outputtype==otWP) && cfg->seed!=SEED_FROM_FILE)
          mexErrMsgTxt("Jacobian output is only valid in the reply mode. Please define cfg.seed");     
      for(i=0;i<cfg->detnum;i++){
         if(!cfg->issrcfrom0){
@@ -610,7 +654,7 @@ void mcx_validate_config(Config *cfg){
      }
      cfg->his.maxmedia=cfg->medianum-1; /*skip medium 0*/
      cfg->his.detnum=cfg->detnum;
-     cfg->his.colcount=cfg->medianum+1; /*column count=maxmedia+2*/
+     cfg->his.colcount=cfg->medianum+1+cfg->issaveexit*6; /*column count=maxmedia+2*/
      mcx_replay_prep(cfg);
 }
 
@@ -622,4 +666,12 @@ extern "C" int mcx_throw_exception(const int id, const char *msg, const char *fi
 
 void mcxlab_usage(){
      printf("Usage:\n    [flux,detphoton,vol,seeds]=mcxlab(cfg);\n\nPlease run 'help mcxlab' for more details.\n");
+}
+
+extern "C" void mcx_matlab_flush(){
+#ifndef MATLAB_MEX_FILE
+        mexEvalString("fflush(stdout);");
+#else
+        mexEvalString("pause(.0001);");
+#endif
 }

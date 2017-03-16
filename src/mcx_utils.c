@@ -19,6 +19,9 @@
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
+#ifndef WIN32
+  #include <sys/ioctl.h>
+#endif
 #include "mcx_utils.h"
 #include "mcx_const.h"
 #include "mcx_shapes.h"
@@ -42,7 +45,7 @@
 
 const char shortopt[]={'h','i','f','n','t','T','s','a','g','b','B','z','u','H','P','N',
                  'd','r','S','p','e','U','R','l','L','I','o','G','M','A','E','v','D',
-		 'k','q','Y','O','F','-','-','\0'};
+		 'k','q','Y','O','F','-','-','x','X','\0'};
 const char *fullopt[]={"--help","--interactive","--input","--photon",
                  "--thread","--blocksize","--session","--array",
                  "--gategroup","--reflect","--reflectin","--srcfrom0",
@@ -52,10 +55,10 @@ const char *fullopt[]={"--help","--interactive","--input","--photon",
                  "--printgpu","--root","--gpu","--dumpmask","--autopilot",
 		 "--seed","--version","--debug","--voidtime","--saveseed",
 		 "--replaydet","--outputtype","--faststep","--maxjumpdebug",
-                 "--maxvoidstep",""};
+                 "--maxvoidstep","--saveexit","--saveref",""};
 
-const char outputtype[]={'x','f','e','j','t','\0'};
-const char debugflag[]={'R','M','\0'};
+const char outputtype[]={'x','f','e','j','p','\0'};
+const char debugflag[]={'R','M','P','\0'};
 const char *srctypeid[]={"pencil","isotropic","cone","gaussian","planar",
     "pattern","fourier","arcsine","disk","fourierx","fourierx2d","zgaussian","line","slit",""};
 
@@ -111,6 +114,7 @@ void mcx_initcfg(Config *cfg){
      memcpy(cfg->his.magic,"MCXH",4);
      cfg->his.version=1;
      cfg->his.unitinmm=1.f;
+     cfg->his.normalizer=1.f;
      cfg->shapedata=NULL;
      cfg->seeddata=NULL;
      cfg->reseedlimit=10000000;
@@ -119,6 +123,7 @@ void mcx_initcfg(Config *cfg){
      cfg->srcpattern=NULL;
      cfg->debuglevel=0;
      cfg->issaveseed=0;
+     cfg->issaveexit=0;
      cfg->replay.seed=NULL;
      cfg->replay.weight=NULL;
      cfg->replay.tof=NULL;
@@ -128,6 +133,8 @@ void mcx_initcfg(Config *cfg){
      cfg->detectedcount=0;
      cfg->runtime=0;
      cfg->faststep=0;
+     cfg->srcdir.w=0.f;
+     cfg->issaveref=0;
      memset(&(cfg->srcparam1),0,sizeof(float4));
      memset(&(cfg->srcparam2),0,sizeof(float4));
      memset(cfg->deviceid,0,MAX_DEVICE);
@@ -218,11 +225,21 @@ void mcx_printlog(Config *cfg, char *str){
      }
 }
 
-void mcx_normalize(float field[], float scale, int fieldlen){
+void mcx_normalize(float field[], float scale, int fieldlen, int option){
      int i;
      for(i=0;i<fieldlen;i++){
+         if(option==2 && field[i]<0.f)
+	     continue;
          field[i]*=scale;
      }
+}
+
+void mcx_flush(Config *cfg){
+#ifdef MCX_CONTAINER
+    mcx_matlab_flush();
+#else
+    fflush(cfg->flog);
+#endif
 }
 
 void mcx_error(const int id,const char *msg,const char *file,const int linenum){
@@ -335,6 +352,11 @@ void mcx_prepdomain(char *filename, Config *cfg){
 	}
         mcx_loadseedfile(cfg);
      }
+     if(cfg->medianum){
+        for(int i=0;i<cfg->medianum;i++)
+             if(cfg->prop[i].mus==0.f)
+	         cfg->prop[i].mus=EPS;
+     }
      for(int i=0;i<MAX_DEVICE;i++)
         if(cfg->deviceid[i]=='0')
            cfg->deviceid[i]='\0';
@@ -374,9 +396,12 @@ void mcx_loadconfig(FILE *in, Config *cfg){
      }
      MCX_ASSERT(fscanf(in,"%f %f %f", &(cfg->srcdir.x),&(cfg->srcdir.y),&(cfg->srcdir.z) )==3);
      comm=fgets(comment,MAX_PATH_LENGTH,in);
+     if(comm!=NULL && sscanf(comm,"%f",&dtmp)==1)
+         cfg->srcdir.w=dtmp;
+
      if(in==stdin)
-     	fprintf(stdout,"%f %f %f\nPlease specify the time gates (format: start end step) in seconds [0.0 1e-9 1e-10]\n\t",
-                                   cfg->srcdir.x,cfg->srcdir.y,cfg->srcdir.z);
+     	fprintf(stdout,"%f %f %f %f\nPlease specify the time gates (format: start end step) in seconds [0.0 1e-9 1e-10]\n\t",
+                                   cfg->srcdir.x,cfg->srcdir.y,cfg->srcdir.z,cfg->srcdir.w);
      MCX_ASSERT(fscanf(in,"%f %f %f", &(cfg->tstart),&(cfg->tend),&(cfg->tstep) )==3);
      comm=fgets(comment,MAX_PATH_LENGTH,in);
 
@@ -506,7 +531,7 @@ void mcx_loadconfig(FILE *in, Config *cfg){
      mcx_prepdomain(filename,cfg);
      cfg->his.maxmedia=cfg->medianum-1; /*skip media 0*/
      cfg->his.detnum=cfg->detnum;
-     cfg->his.colcount=cfg->medianum+1; /*column count=maxmedia+2*/
+     cfg->his.colcount=cfg->medianum+1+(cfg->issaveexit)*6; /*column count=maxmedia+2*/
 
      if(in==stdin)
      	fprintf(stdout,"Please specify the source type[pencil|cone|gaussian]:\n\t");
@@ -684,6 +709,8 @@ int mcx_loadjson(cJSON *root, Config *cfg){
               cfg->srcdir.x=subitem->child->valuedouble;
               cfg->srcdir.y=subitem->child->next->valuedouble;
               cfg->srcdir.z=subitem->child->next->next->valuedouble;
+	      if(subitem->child->next->next->next)
+	         cfg->srcdir.w=subitem->child->next->next->next->valuedouble;
            }
 	   if(!cfg->issrcfrom0){
               cfg->srcpos.x--;cfg->srcpos.y--;cfg->srcpos.z--; /*convert to C index, grid center*/
@@ -766,8 +793,9 @@ int mcx_loadjson(cJSON *root, Config *cfg){
         if(cfg->issave2pt)    cfg->issave2pt=FIND_JSON_KEY("DoSaveVolume","Session.DoSaveVolume",Session,cfg->issave2pt,valueint);
         if(cfg->isnormalized) cfg->isnormalized=FIND_JSON_KEY("DoNormalize","Session.DoNormalize",Session,cfg->isnormalized,valueint);
         if(!cfg->issavedet)   cfg->issavedet=FIND_JSON_KEY("DoPartialPath","Session.DoPartialPath",Session,cfg->issavedet,valueint);
+        if(!cfg->issaveexit)  cfg->issaveexit=FIND_JSON_KEY("DoSaveExit","Session.DoSaveExit",Session,cfg->issaveexit,valueint);
         if(!cfg->issaveseed)  cfg->issaveseed=FIND_JSON_KEY("DoSaveSeed","Session.DoSaveSeed",Session,cfg->issaveseed,valueint);
-        cfg->seed=FIND_JSON_KEY("ReseedLimit","Session.ReseedLimit",Session,cfg->reseedlimit,valueint);
+        cfg->reseedlimit=FIND_JSON_KEY("ReseedLimit","Session.ReseedLimit",Session,cfg->reseedlimit,valueint);
         strncpy(val,FIND_JSON_KEY("OutputType","Session.OutputType",Session,outputtype+cfg->outputtype,valuestring),1);
         if(mcx_lookupindex(val, outputtype)){
                 mcx_error(-2,"the specified output data type is not recognized",__FILE__,__LINE__);
@@ -806,7 +834,7 @@ int mcx_loadjson(cJSON *root, Config *cfg){
      mcx_prepdomain(filename,cfg);
      cfg->his.maxmedia=cfg->medianum-1; /*skip media 0*/
      cfg->his.detnum=cfg->detnum;
-     cfg->his.colcount=cfg->medianum+1; /*column count=maxmedia+2*/
+     cfg->his.colcount=cfg->medianum+1+(cfg->issaveexit)*6; /*column count=maxmedia+2*/
      return 0;
 }
 
@@ -888,7 +916,7 @@ void mcx_loadseedfile(Config *cfg){
     cfg->seed=SEED_FROM_FILE;
     cfg->nphoton=his.savedphoton;
 
-    if(cfg->outputtype==otJacobian || cfg->outputtype==otTaylor){ //cfg->replaydet>0
+    if(cfg->outputtype==otJacobian || cfg->outputtype==otWP){ //cfg->replaydet>0
        int i,j;
        float *ppath=(float*)malloc(his.savedphoton*his.colcount*sizeof(float));
        cfg->replay.weight=(float*)malloc(his.savedphoton*sizeof(float));
@@ -1031,6 +1059,38 @@ void  mcx_maskdet(Config *cfg){
 	 exit(0);
      }
      free(padvol);
+}
+
+void mcx_progressbar(float percent, Config *cfg){
+    unsigned int percentage, j,colwidth=79;
+    static unsigned int oldmarker=0xFFFFFFFF;
+
+#ifndef MCX_CONTAINER
+  #ifdef TIOCGWINSZ
+    struct winsize ttys;
+    ioctl(0, TIOCGWINSZ, &ttys);
+    colwidth=ttys.ws_col;
+  #endif
+#endif
+    percent=MIN(percent,1.f);
+
+    percentage=percent*(colwidth-18);
+
+    if(percentage != oldmarker){
+        if(percent!=-0.f)
+	    for(j=0;j<colwidth;j++)     MCX_FPRINTF(stdout,"\b");
+        oldmarker=percentage;
+        MCX_FPRINTF(stdout,"Progress: [");
+        for(j=0;j<percentage;j++)      MCX_FPRINTF(stdout,"=");
+        MCX_FPRINTF(stdout,(percentage<colwidth-18) ? ">" : "=");
+        for(j=percentage;j<colwidth-18;j++) MCX_FPRINTF(stdout," ");
+        MCX_FPRINTF(stdout,"] %3d%%",percentage*100/(colwidth-18));
+#ifdef MCX_CONTAINER
+        mcx_matlab_flush();
+#else
+        fflush(stdout);
+#endif
+    }
 }
 
 int mcx_readarg(int argc, char *argv[], int id, void *output,const char *type){
@@ -1262,6 +1322,14 @@ void mcx_parsecmd(int argc, char* argv[], Config *cfg){
 		     case 'F':
 		     	        i=mcx_readarg(argc,argv,i,&(cfg->faststep),"char");
 		     	        break;
+		     case 'x':
+ 		                i=mcx_readarg(argc,argv,i,&(cfg->issaveexit),"char");
+ 				if (cfg->issaveexit) cfg->issavedet=1;
+ 				break;
+		     case 'X':
+ 		                i=mcx_readarg(argc,argv,i,&(cfg->issaveref),"char");
+ 				if (cfg->issaveref) cfg->issaveref=1;
+ 				break;
 		     case '-':  /*additional verbose parameters*/
                                 if(strcmp(argv[i]+2,"maxvoidstep"))
                                      i=mcx_readarg(argc,argv,i,&(cfg->maxvoidstep),"int");
@@ -1282,7 +1350,7 @@ void mcx_parsecmd(int argc, char* argv[], Config *cfg){
 		MCX_FPRINTF(cfg->flog,"unable to save to log file, will print from stdout\n");
           }
      }
-     if(cfg->outputtype==otJacobian && cfg->seed!=SEED_FROM_FILE)
+     if((cfg->outputtype==otJacobian ||cfg->outputtype==otWP) && cfg->seed!=SEED_FROM_FILE)
          MCX_ERROR(-1,"Jacobian output is only valid in the reply mode. Please give an mch file after '-E'.");
 
      if(cfg->isgpuinfo!=2){ /*print gpu info only*/
@@ -1360,7 +1428,7 @@ void mcx_printheader(Config *cfg){
     MCX_FPRINTF(cfg->flog,"\
 ###############################################################################\n\
 #                      Monte Carlo eXtreme (MCX) -- CUDA                      #\n\
-#          Copyright (c) 2009-2016 Qianqian Fang <q.fang at neu.edu>          #\n\
+#          Copyright (c) 2009-2017 Qianqian Fang <q.fang at neu.edu>          #\n\
 #                             http://mcx.space/                               #\n\
 #                                                                             #\n\
 #         Computational Imaging Laboratory (CIL) [http://fanglab.org]         #\n\
@@ -1401,15 +1469,20 @@ where possible parameters include (the first value in [*|*] is the default)\n\
  -u [1.|float] (--unitinmm)    defines the length unit for the grid edge\n\
  -U [1|0]      (--normalize)   1 to normalize flux to unitary; 0 save raw\n\
  -d [1|0]      (--savedet)     1 to save photon info at detectors; 0 not save\n\
+ -x [0|1]      (--saveexit)    1 to save photon exit positions and directions\n\
+                               setting -x to 1 also implies setting '-d' to 1\n\
+ -X [0|1]      (--saveref)     1 to save diffuse reflectance at the air-voxels\n\
+                               right outside of the domain; if non-zero voxels\n\
+			       appear at the boundary, pad 0s before using -X\n\
  -M [0|1]      (--dumpmask)    1 to dump detector volume masks; 0 do not save\n\
  -H [1000000] (--maxdetphoton) max number of detected photons\n\
  -S [1|0]      (--save2pt)     1 to save the flux field; 0 do not save\n\
  -E [0|int|mch](--seed)        set random-number-generator seed, -1 to generate\n\
                                if an mch file is followed, MMC will \"replay\" \n\
                                the detected photon; the replay mode can be used\n\
- -O [X|XFEJT]  (--outputtype)  X - output flux, F - fluence, E - energy deposit\n\
-                               J - Jacobian (replay mode),   T - approximated\n\
-                               Jacobian (replay mode only)\n\
+ -O [X|XFEJP]  (--outputtype)  X - output flux, F - fluence, E - energy deposit\n\
+                               J - Jacobian (replay mode),   P - scattering\n\
+                               event counts at each voxel (replay mode only)\n\
  -k [1|0]      (--voidtime)    when src is outside, 1 enables timer inside void\n\
  -h            (--help)        print this message\n\
  -l            (--log)         print messages to a log file instead\n\
@@ -1422,9 +1495,15 @@ where possible parameters include (the first value in [*|*] is the default)\n\
  -W '50,30,20' (--workload)    workload for active devices; normalized by sum\n\
  -F [0|1]      (--faststep)    1-use fast 1mm stepping, [0]-precise ray-tracing\n\
  -v            (--version)     print MCX revision number\n\
+ -D [0|int]    (--debug)       print debug information (you can use an integer\n\
+  or                           or a string by combining the following flags)\n\
+ -D [''|RMP]                   1 R  debug RNG\n\
+                               2 M  photon movement info\n\
+                               4 P  print progress bar\n\
+      combine multiple items by using a string, or add selected numbers together\n\
 \n\
 example: (autopilot mode)\n\
-       %s -A -n 1e7 -f input.inp -G 1 \n\
+       %s -A -n 1e7 -f input.inp -G 1 -D P\n\
 or (manual mode)\n\
        %s -t 16384 -T 64 -n 1e7 -f input.inp -s test -r 2 -g 10 -d 1 -b 1 -G 1\n\
 or (use multiple devices - 1st,2nd and 4th GPUs - together with equal load)\n\

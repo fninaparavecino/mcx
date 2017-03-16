@@ -13,6 +13,7 @@ endif
 MKDIR      := mkdir
 
 CUDACC=nvcc
+MEX=mex
 AR=$(CC)
 
 BINARY=mcx
@@ -21,12 +22,20 @@ OUTPUT_DIR=../bin
 INCLUDEDIRS=-I/usr/local/cuda/include
 
 CUDART=-lcudart
+CUOMPLINK=
+
+ARCH = $(shell uname -m)
+PLATFORM = $(shell uname -s)
 
 ifeq ($(BACKEND),ocelot)
-  LINKOPT=-L/usr/local/lib `OcelotConfig -l`
-  CUCCOPT=-g -arch=sm_20 #--maxrregcount 32
+  LINKOPT=-L/usr/local/lib `OcelotConfig -l` -ltinfo
+  CUCCOPT=-D__STRICT_ANSI__ -g #--maxrregcount 32
 else ifeq ($(BACKEND),cudastatic)
-  CUDART=-lcudadevrt -lcudart_static -ldl -lrt -static-libgcc -static-libstdc++
+  ifeq ($(findstring Darwin,$(PLATFORM)), Darwin)
+      CUDART=-lcudadevrt -lcudart_static -ldl -static-libgcc -static-libstdc++
+  else
+      CUDART=-lcudadevrt -lcudart_static -ldl -lrt -static-libgcc -static-libstdc++
+  endif
   LINKOPT=-L/usr/local/cuda/lib -lm $(CUDART)
   CUCCOPT=-lineinfo -Xcompiler -Wall#-g #-arch compute_20 #--maxrregcount 32
 else
@@ -38,29 +47,32 @@ DLLFLAG=-fPIC
 OMP=-fopenmp
 CUDA_STATIC=--cudart static -Xcompiler "-static-libgcc -static-libstdc++"
 
-CPPOPT=-g -Wall -O3 -std=c99 # -DUSE_OS_TIMER
+CPPOPT=-g -Wall -std=c99 # -DUSE_OS_TIMER
 
 OBJSUFFIX=.o
 EXESUFFIX=
 
 FILES=mcx_core mcx_utils mcx_shapes tictoc mcextreme cjson/cJSON
 
-ARCH = $(shell uname -m)
-PLATFORM = $(shell uname -s)
 ifeq ($(findstring CYGWIN,$(PLATFORM)), CYGWIN)
   CC=nvcc
-  LINKOPT=-L/c/CUDA/lib $(CUDART) --link 
+  CUOMPLINK=-Xcompiler
+  LINKOPT=-L/c/CUDA/lib $(CUDART)
   INCLUDEDIRS +=-I/c/CUDA/include
   CPPOPT =-c -D_CRT_SECURE_NO_DEPRECATE -DWIN32
   OBJSUFFIX=.obj
   EXESUFFIX=.exe
   DLLFLAG=
-  OMP=-Xcompiler /openmp
-  CUCCOPT+=-Xcompiler "/openmp /W0"
-  CUDA_STATIC=--cudart static $(OMP) -Xcompiler /MT
+  OMP=/openmp
+  MEX=cmd /c mex
+  CUCCOPT+=-Xcompiler "$(OMP) /W0"
+  CUDA_STATIC=--cudart static -Xcompiler $(OMP) -Xcompiler /MT
+  CPPOPT+=-Xcompiler $(OMP)
 else ifeq ($(findstring Darwin,$(PLATFORM)), Darwin)
   CUDA_STATIC=--cudart static
+  CPPOPT+=$(OMP)
 else
+  CPPOPT+=$(OMP)
   CUCCOPT+=-Xcompiler $(OMP)
   ifeq ($(findstring x86_64,$(ARCH)), x86_64)
      CPPOPT +=-m64
@@ -75,12 +87,12 @@ else
   endif
 endif
 
-CPPOPT+=$(OMP)
 CUGENCODE=-arch=sm_20
-CUOMPLINK=
+OUTPUTFLAG:=-o
 
-all logfast:CUCCOPT+=-use_fast_math
+logfast:    CUCCOPT+=-use_fast_math
 xor:        CUCCOPT+=-DUSE_XORSHIFT128P_RAND
+xor:        LINKOPT+=-DUSE_XORSHIFT128P_RAND
 fast:       CUCCOPT+=-DUSE_XORSHIFT128P_RAND -use_fast_math
 log:        CUCCOPT+=
 debugxor:   xor
@@ -89,12 +101,16 @@ racing:     CUCCOPT+=-DTEST_RACING
 xoratomic:  CUCCOPT+=-DUSE_XORSHIFT128P_RAND -DUSE_ATOMIC -use_fast_math $(CUGENCODE) MCX_TARGET_NAME='"Xorshift128+ Atomic MCX"'
 logatomic:  CUCCOPT+=-DUSE_ATOMIC -use_fast_math $(CUGENCODE) -DMCX_TARGET_NAME='"LL5 Atomic MCX"'
 fermi fermimex fermioct:      CUCCOPT+=-DUSE_ATOMIC -use_fast_math
+fermi fermimex fermioct:      xor
+fermimex fermioct: OUTPUTFLAG:=-output
+
 fermi:      LINKOPT+=$(CUOMPLINK) $(OMP)
-maxwellmex: fermimex
-maxwelloct: fermioct
-maxwellmex maxwelloct: CUCCOPT+=-DUSE_XORSHIFT128P_RAND
-maxwellmex maxwelloct: MEXCCOPT+=-DUSE_XORSHIFT128P_RAND
+maxwellmex pascalmex: fermimex
+maxwelloct pascaloct: fermioct
+maxwellmex maxwelloct pascalmex pascaloct: CUCCOPT+=-DUSE_XORSHIFT128P_RAND
+maxwellmex maxwelloct pascalmex pascaloct: MEXCCOPT+=-DUSE_XORSHIFT128P_RAND
 maxwelloct maxwellmex: CUGENCODE=-arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code=sm_50 -code=sm_52
+pascaloct  pascalmex:  CUGENCODE=-arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code=sm_50 -code=sm_52 -code=sm_61
 
 xorbox logbox:		CUCCOPT+=-DUSE_CACHEBOX -use_fast_math $(CUGENCODE) -DMCX_TARGET_NAME='"Cachebox MCX"'
 debugxor debuglog:	CUCCOPT+=-DMCX_DEBUG
@@ -105,25 +121,28 @@ detbox mexbox octbox: CUCCOPT+=-DMCX_TARGET_NAME='"Cached Detective MCX"'
 fermi fermimex fermioct: CUCCOPT+=-DMCX_TARGET_NAME='"Fermi MCX"'
 det detbox: BINARY:=$(BINARY)_det
 logbox detbox:          BINARY:=$(BINARY)_cached
-maxwell:    fermi
+all maxwell pascal:    fermi
 maxwell:    CUGENCODE=-arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code=sm_50 -code=sm_52
+pascal:     CUGENCODE=-arch=compute_20 -code=sm_20 -code=sm_30 -code=sm_35 -code=sm_50 -code=sm_52 -code=sm_61
 xormax:     maxwell
-xormax:     CUCCOPT+=-DUSE_XORSHIFT128P_RAND
+xorpas:     pascal
+xormax xorpas:     CUCCOPT+=-DUSE_XORSHIFT128P_RAND
+
 
 static:     xormax
 static:     AR=nvcc
 static:     CUOMPLINK=-Xcompiler
 static:     LINKOPT=$(CUDA_STATIC)
 
-mexbox fermimex:        AR=mex
-mexbox fermimex:        LINKOPT+= CXXFLAGS='$$CXXFLAGS -DSAVE_DETECTORS -DUSE_CACHEBOX -DMCX_CONTAINER -fopenmp $(MEXCCOPT) $(USERCCOPT)' -lgomp LDFLAGS='$$LDFLAGS -fopenmp $(USERLINKOPT)'
+mexbox fermimex:        AR=$(MEX)
+mexbox fermimex:        LINKOPT+= CXXFLAGS='$$CXXFLAGS -DSAVE_DETECTORS -DUSE_CACHEBOX -DMCX_CONTAINER $(OMP) $(MEXCCOPT) $(USERCCOPT)' -lgomp LDFLAGS='$$LDFLAGS $(OMP) $(USERLINKOPT)'
 mexbox oct octbox fermimex fermioct:    OUTPUT_DIR=../mcxlab
 fermimex:      BINARY=mcxlab
 fermioct:      BINARY=mcxlab.mex
 mexbox:                     BINARY=mcxlab_atom
 mexbox octbox fermimex fermioct:    CUCCOPT+=--compiler-options "$(DLLFLAG)" -DMCX_CONTAINER
 mexbox octbox fermimex fermioct:    CPPOPT+=$(DLLFLAG) -DMCX_CONTAINER
-mexbox fermimex:        LINKOPT+=mcxlab.cpp -cxx -outdir $(OUTPUT_DIR) $(INCLUDEDIRS)
+mexbox fermimex:        LINKOPT+=mcxlab.cpp -outdir $(OUTPUT_DIR) $(INCLUDEDIRS)
 
 octbox fermioct:        AR= CXXFLAGS='-DSAVE_DETECTORS -DUSE_CACHEBOX -fopenmp $(MEXCCOPT) $(USERCCOPT)' LDFLAGS='-fopenmp $(USERLINKOPT)' mkoctfile
 fermioct:               BINARY=mcxlab.mex
@@ -133,9 +152,10 @@ octbox fermioct:        LINKOPT+=--mex mcxlab.cpp $(INCLUDEDIRS)
 fermidebug: CUCCOPT+=-DMCX_DEBUG
 fermidebug: fermi
 
+all: fermi
 debug: debugxor
-mex: maxwellmex
-oct: maxwelloct
+mex: fermimex
+oct: fermioct
 
 OBJS      := $(addsuffix $(OBJSUFFIX), $(FILES))
 
@@ -147,7 +167,7 @@ makedirs:
 
 $(OUTPUT_DIR)/$(BINARY): makedirs $(OBJS)
 $(OUTPUT_DIR)/$(BINARY): $(OBJS)
-	$(AR) $(OBJS) -o $(OUTPUT_DIR)/$(BINARY) $(LINKOPT) $(USERLINKOPT)
+	$(AR) $(OBJS) $(OUTPUTFLAG) $(OUTPUT_DIR)/$(BINARY) $(LINKOPT) $(USERLINKOPT)
 
 %$(OBJSUFFIX): %.c
 	$(CC) $(INCLUDEDIRS) $(CPPOPT) -c -o $@  $<
@@ -162,5 +182,5 @@ cudasdk:
 	   echo "Please first install CUDA SDK and add the path to nvcc to your PATH environment variable."; exit 1;\
 	fi
 
-.DEFAULT_GOAL := xormax
+.DEFAULT_GOAL := all
 
